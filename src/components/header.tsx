@@ -6,18 +6,28 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BatchStatusBar } from "./shop/BatchStatusBar";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, User, ShieldCheck, ChevronDown, LogIn, Share2 } from "lucide-react";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const [userData, setUserData] = useState<any>(null);
   const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+         try {
+           const snap = await getDoc(doc(db, "users", currentUser.uid));
+           if (snap.exists()) setUserData(snap.data());
+         } catch(e) {}
+      } else {
+         setUserData(null);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -41,7 +51,15 @@ export function Header() {
       <div className="container mx-auto px-4 h-18 md:h-20 flex items-center justify-between">
         
         {/* Brand */}
-        <Link href="/" className="flex items-center space-x-2">
+        <Link 
+          href={userData?.status === 'PENDING' ? '/espera' : '/'} 
+          onClick={(e) => {
+            if (userData?.status === 'PENDING') {
+              e.preventDefault();
+            }
+          }}
+          className="flex items-center space-x-2 cursor-pointer"
+        >
           <motion.div layoutId="brand-logo-container" className="flex items-baseline relative z-10 whitespace-nowrap">
             <span className="font-bold text-2xl md:text-3xl tracking-tight text-white">May</span>
             <span className="font-light text-2xl md:text-3xl tracking-tight text-white pr-1">Nutri</span>

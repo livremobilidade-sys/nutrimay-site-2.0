@@ -14,8 +14,15 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMounted(true);
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      // If no user, they can wander public pages as usual.
-      if (!user) return;
+      if (!user) {
+        if (pathname !== "/" && pathname !== "/termos" && pathname !== "/privacidade") {
+           router.push("/");
+           setTimeout(() => {
+              window.dispatchEvent(new CustomEvent("open-auth"));
+           }, 800);
+        }
+        return;
+      }
 
       try {
         const userRef = doc(db, "users", user.uid);

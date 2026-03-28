@@ -104,7 +104,7 @@ export function Header() {
                             <span className="text-xs font-bold uppercase tracking-widest">Convidar Amigos</span>
                          </button>
 
-                         {user.email === 'evari.may@gmail.com' && ( // Exemplo de Check para Admin
+                         {['evari.may@gmail.com', 'evaristosilvalima@gmail.com'].includes(user.email) && ( // Lista VIP de Admins Autorizados
                             <Link 
                               href="/admin" 
                               onClick={() => setShowMenu(false)}

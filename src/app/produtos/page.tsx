@@ -4,12 +4,52 @@ import { MethodHeader } from "@/components/shop/MethodHeader";
 import { BatchStatusBar } from "@/components/shop/BatchStatusBar";
 import { ProductGrid } from "@/components/shop/ProductGrid";
 import { Cart } from "@/components/cart";
-import { useState } from "react";
-import { HelpCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { HelpCircle, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
+import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function ShopPage() {
+  const router = useRouter();
   const [isMethodModalOpen, setIsMethodModalOpen] = useState(true);
+  const [authChecking, setAuthChecking] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.push("/");
+        return;
+      }
+      try {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          if (data.status !== "ACTIVE") {
+            router.push("/espera");
+          } else {
+            setAuthChecking(false);
+          }
+        } else {
+          router.push("/cadastro/completar");
+        }
+      } catch (err) {
+        console.error("Auth check failed", err);
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-[#1a1a1c] flex flex-col items-center justify-center">
+        <Loader2 className="w-12 h-12 text-[#22C55E] animate-spin mb-4" />
+        <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em]">Validando Acesso VIP...</p>
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#1a1a1c] pt-32 text-white relative flex flex-col">

@@ -189,7 +189,11 @@ export default function CompleteProfilePage() {
         await updateDoc(doc(db, "users", referrerData.uid || referrerData.id), { referralCount: increment(1) });
       }
       alert("Cadastro Sincronizado!");
-      router.push("/produtos");
+      if (finalStatus === "ACTIVE") {
+        router.push("/produtos");
+      } else {
+        router.push("/espera");
+      }
     } catch (err) { setErrors({ submit: "Erro ao salvar cadastro." });
     } finally { setSaving(false); }
   };

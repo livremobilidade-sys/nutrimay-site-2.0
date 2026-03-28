@@ -2,9 +2,12 @@
 
 import { useCartStore } from "@/store/useCartStore";
 import { useState, useEffect } from "react";
-import { ChevronLeft, CreditCard, QrCode, ClipboardCheck, CheckCircle2, AlertCircle, ShieldCheck, Lock as LockIcon, ArrowRight } from "lucide-react";
+import { ChevronLeft, CreditCard, QrCode, ClipboardCheck, CheckCircle2, AlertCircle, ShieldCheck, Lock as LockIcon, ArrowRight, Check, Edit2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -43,9 +46,53 @@ export default function CheckoutPage() {
 
   const [cardBrand, setCardBrand] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
+  const [editPersonal, setEditPersonal] = useState(true);
+  const [editAddress, setEditAddress] = useState(true);
 
   useEffect(() => {
     setMounted(true);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setFormData(prev => {
+              const newData = {
+                ...prev,
+                name: prev.name || user.displayName || data.name || "",
+                email: prev.email || user.email || data.email || "",
+                cpf: prev.cpf || data.cpf || "",
+                phone: prev.phone || data.phone || "",
+                cep: prev.cep || data.cep || "",
+                street: prev.street || data.street || "",
+                number: prev.number || data.number || "",
+                city: prev.city || data.city || "",
+                state: prev.state || data.state || ""
+              };
+              
+              if (newData.name && newData.email && newData.cpf && newData.phone) {
+                setEditPersonal(false);
+              }
+              if (newData.cep && newData.street && newData.number) {
+                setEditAddress(false);
+              }
+              
+              return newData;
+            });
+          } else if (user.email) {
+             setFormData(prev => ({
+               ...prev,
+               name: prev.name || user.displayName || "",
+               email: prev.email || user.email || ""
+             }));
+          }
+        } catch (e) {
+             console.error("Error fetching user", e);
+        }
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   const subtotal = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -326,101 +373,133 @@ export default function CheckoutPage() {
             <section className="bg-white/[0.02] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 md:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.3)] relative overflow-hidden">
                <div className="absolute top-0 right-0 p-20 bg-white/2 blur-[100px] pointer-events-none" />
                
-               <div className="inline-flex text-[9px] font-medium uppercase px-4 py-1.5 rounded-full mb-8 bg-white/5 border border-white/10 text-white/40">
-                 01. Identificação
+               <div className="flex items-center justify-between mb-8">
+                 <div className="flex flex-col gap-2">
+                   <div className="inline-flex text-[9px] font-medium uppercase px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/40 w-max">
+                     01. Identificação
+                   </div>
+                   <h2 className="text-2xl font-black text-white tracking-tighter uppercase">
+                     Meus Dados.
+                   </h2>
+                 </div>
+                 {!editPersonal && (
+                   <button onClick={() => setEditPersonal(true)} className="flex items-center gap-2 text-[#22C55E] text-[10px] font-bold uppercase hover:underline">
+                     <Edit2 className="w-3 h-3" /> Editar
+                   </button>
+                 )}
                </div>
 
-               <h2 className="text-2xl font-black text-white tracking-tighter mb-8 uppercase">
-                 Meus Dados.
-               </h2>
-
-               <div className="grid md:grid-cols-2 gap-8">
-                 <div className="space-y-3">
-                   <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Nome Completo</label>
-                   <input 
-                     type="text" name="name" value={formData.name} onChange={handleInputChange}
-                     placeholder="JOÃO DA SILVA"
-                     className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none uppercase font-bold text-xs ${errors.name ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
-                   />
-                   {errors.name && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.name}</p>}
+               {!editPersonal ? (
+                 <div className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col gap-2">
+                   <div className="flex items-center gap-3 text-white font-bold uppercase text-sm"><Check className="text-[#22C55E] w-4 h-4"/> {formData.name}</div>
+                   <div className="text-xs text-neutral-400 font-medium uppercase">{formData.email} • CPF {formData.cpf}</div>
+                   <div className="text-xs text-[#22C55E] font-medium uppercase mt-2">Pronto para a compra</div>
                  </div>
-                 <div className="space-y-3">
-                   <label className="text-[10px] font-medium text-white/40 uppercase pl-1">E-mail de Contato</label>
-                   <input 
-                     type="email" name="email" value={formData.email} onChange={handleInputChange}
-                     placeholder="EMAIL@EXEMPLO.COM"
-                     className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none uppercase font-bold text-xs ${errors.email ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
-                   />
-                   {errors.email && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.email}</p>}
+               ) : (
+                 <div className="grid md:grid-cols-2 gap-8">
+                   <div className="space-y-3">
+                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Nome Completo</label>
+                     <input 
+                       type="text" name="name" value={formData.name} onChange={handleInputChange}
+                       placeholder="JOÃO DA SILVA"
+                       className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none uppercase font-bold text-xs ${errors.name ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
+                     />
+                     {errors.name && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.name}</p>}
+                   </div>
+                   <div className="space-y-3">
+                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">E-mail de Contato</label>
+                     <input 
+                       type="email" name="email" value={formData.email} onChange={handleInputChange}
+                       placeholder="EMAIL@EXEMPLO.COM"
+                       className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none uppercase font-bold text-xs ${errors.email ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
+                     />
+                     {errors.email && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.email}</p>}
+                   </div>
+                   <div className="space-y-3">
+                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Documento CPF</label>
+                     <input 
+                       type="text" name="cpf" value={formData.cpf} onChange={handleInputChange}
+                       placeholder="000.000.000-00"
+                       className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none font-bold text-xs ${errors.cpf ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
+                     />
+                     {errors.cpf && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.cpf}</p>}
+                   </div>
+                   <div className="space-y-3">
+                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Telefone / WhatsApp</label>
+                     <input 
+                       type="text" name="phone" value={formData.phone} onChange={handleInputChange}
+                       placeholder="(11) 99999-9999"
+                       className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none font-bold text-xs ${errors.phone ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
+                     />
+                     {errors.phone && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.phone}</p>}
+                   </div>
                  </div>
-                 <div className="space-y-3">
-                   <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Documento CPF</label>
-                   <input 
-                     type="text" name="cpf" value={formData.cpf} onChange={handleInputChange}
-                     placeholder="000.000.000-00"
-                     className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none font-bold text-xs ${errors.cpf ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
-                   />
-                   {errors.cpf && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.cpf}</p>}
-                 </div>
-                 <div className="space-y-3">
-                   <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Telefone / WhatsApp</label>
-                   <input 
-                     type="text" name="phone" value={formData.phone} onChange={handleInputChange}
-                     placeholder="(11) 99999-9999"
-                     className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none font-bold text-xs ${errors.phone ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
-                   />
-                   {errors.phone && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.phone}</p>}
-                 </div>
-               </div>
+               )}
             </section>
 
             {/* Step 2: Address */}
             <section className="bg-white/[0.02] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 md:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.3)] relative overflow-hidden">
                <div className="absolute top-0 right-0 p-20 bg-white/2 blur-[100px] pointer-events-none" />
 
-               <div className="inline-flex text-[9px] font-medium uppercase px-4 py-1.5 rounded-full mb-8 bg-white/5 border border-white/10 text-white/40">
-                 02. Logística
+               <div className="flex items-center justify-between mb-8">
+                 <div className="flex flex-col gap-2">
+                   <div className="inline-flex text-[9px] font-medium uppercase px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/40 w-max">
+                     02. Logística
+                   </div>
+                   <h2 className="text-2xl font-black text-white tracking-tight uppercase">
+                     Endereço.
+                   </h2>
+                 </div>
+                 {!editAddress && (
+                   <button onClick={() => setEditAddress(true)} className="flex items-center gap-2 text-[#22C55E] text-[10px] font-bold uppercase hover:underline">
+                     <Edit2 className="w-3 h-3" /> Editar
+                   </button>
+                 )}
                </div>
-
-               <h2 className="text-2xl font-black text-white tracking-tight mb-8 uppercase">
-                 Endereço.
-               </h2>
                
-               <div className="grid md:grid-cols-6 gap-8">
-                 <div className="md:col-span-2 space-y-3">
-                   <label className="text-[10px] font-medium text-white/40 uppercase pl-1">CEP</label>
-                   <input 
-                     type="text" name="cep" value={formData.cep} onChange={handleInputChange}
-                     placeholder="00000-000"
-                     className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none font-bold text-xs ${errors.cep ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
-                   />
-                   {errors.cep && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.cep}</p>}
+               {!editAddress ? (
+                 <div className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col gap-2">
+                   <div className="flex items-center gap-3 text-white font-bold uppercase text-sm"><Check className="text-[#22C55E] w-4 h-4"/> {formData.street}, {formData.number}</div>
+                   <div className="text-xs text-neutral-400 font-medium uppercase">{formData.city} - {formData.state} • CEP {formData.cep}</div>
+                   <div className="text-xs text-[#22C55E] font-medium uppercase mt-2">Pronto para entrega</div>
                  </div>
-                 <div className="md:col-span-4 space-y-3">
-                   <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Rua / Avenida</label>
-                   <input 
-                     type="text" name="street" value={formData.street} onChange={handleInputChange}
-                     placeholder="RUA..."
-                     className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white placeholder:text-neutral-800 outline-none uppercase font-bold text-sm"
-                   />
+               ) : (
+                 <div className="grid md:grid-cols-6 gap-8">
+                   <div className="md:col-span-2 space-y-3">
+                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">CEP</label>
+                     <input 
+                       type="text" name="cep" value={formData.cep} onChange={handleInputChange}
+                       placeholder="00000-000"
+                       className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none font-bold text-xs ${errors.cep ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
+                     />
+                     {errors.cep && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.cep}</p>}
+                   </div>
+                   <div className="md:col-span-4 space-y-3">
+                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Rua / Avenida</label>
+                     <input 
+                       type="text" name="street" value={formData.street} onChange={handleInputChange}
+                       placeholder="RUA..."
+                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white placeholder:text-neutral-800 outline-none uppercase font-bold text-sm"
+                     />
+                   </div>
+                   <div className="md:col-span-2 space-y-3">
+                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Número</label>
+                     <input 
+                       type="text" name="number" value={formData.number} onChange={handleInputChange}
+                       placeholder="123"
+                       className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none uppercase font-bold text-xs ${errors.number ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
+                     />
+                     {errors.number && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.number}</p>}
+                   </div>
+                   <div className="md:col-span-4 space-y-3">
+                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Cidade / UF</label>
+                     <input 
+                       type="text" name="city" value={formData.city} onChange={handleInputChange}
+                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white outline-none uppercase font-bold text-sm"
+                     />
+                   </div>
                  </div>
-                 <div className="md:col-span-2 space-y-3">
-                   <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Número</label>
-                   <input 
-                     type="text" name="number" value={formData.number} onChange={handleInputChange}
-                     placeholder="123"
-                     className={`w-full bg-white/[0.03] border rounded-2xl p-5 text-white placeholder:text-white/10 transition-all outline-none uppercase font-bold text-xs ${errors.number ? 'border-red-500/50' : 'border-white/5 focus:border-[#22C55E]/30'}`}
-                   />
-                   {errors.number && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.number}</p>}
-                 </div>
-                 <div className="md:col-span-4 space-y-3">
-                   <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Cidade / UF</label>
-                   <input 
-                     type="text" name="city" value={formData.city} onChange={handleInputChange}
-                     className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white outline-none uppercase font-bold text-sm"
-                   />
-                 </div>
-               </div>
+               )}
             </section>
 
             {/* Step 3: Payment */}

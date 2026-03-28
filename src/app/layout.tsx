@@ -3,6 +3,8 @@ import { Inter, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Header } from "@/components/header";
+import { AuthGuard } from "@/components/auth/AuthGuard";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -34,8 +36,10 @@ export default function RootLayout({
           forcedTheme="dark"
           disableTransitionOnChange
         >
-          <Header />
-          {children}
+          <AuthGuard>
+            <Header />
+            {children}
+          </AuthGuard>
         </ThemeProvider>
       </body>
     </html>

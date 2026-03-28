@@ -126,14 +126,14 @@ export function Header() {
                     )}
                  </AnimatePresence>
               </div>
-            ) : (
+            ) : pathname !== "/" ? (
               <button 
                 onClick={() => window.dispatchEvent(new CustomEvent('open-auth'))}
                 className="flex items-center gap-3 px-6 py-2 bg-[#22C55E] text-black text-[10px] font-black uppercase rounded-full hover:scale-105 transition-all shadow-xl shadow-[#22C55E]/10"
               >
                 <LogIn className="w-3 h-3" /> Entrar VIP
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

@@ -87,9 +87,18 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
       const userRef = doc(db, "users", user.uid);
       const snap = await getDoc(userRef);
       if (snap.exists() && snap.data().profileComplete) {
+        const userData = snap.data();
+        if (userData.status !== 'ACTIVE') {
+           router.push("/espera");
+           onClose();
+           return;
+        }
         onSuccess?.();
         onClose();
-        // Stay on page or go to products
+        // optionally transition to /produtos if not already there
+        if (window.location.pathname === "/") {
+           router.push("/produtos");
+        }
       } else {
         router.push("/cadastro/completar");
         onClose();

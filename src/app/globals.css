@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-primary-dark: #F97316;
+  --color-primary-light: #22C55E;
+  
+  --color-background-dark: #0a0a0a;
+  --color-foreground-dark: #f5f5f5;
+  
+  --color-background-light: #fafafa;
+  --color-foreground-light: #171717;
+}
+
+@layer base {
+  :root {
+    --background: var(--color-background-light);
+    --foreground: var(--color-foreground-light);
+    --primary: var(--color-primary-light);
+    --primary-foreground: #ffffff;
+  }
+  .dark {
+    --background: var(--color-background-dark);
+    --foreground: var(--color-foreground-dark);
+    --primary: var(--color-primary-dark);
+    --primary-foreground: #ffffff;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-gray-200 dark:border-gray-800;
+  }
+  body {
+    @apply bg-[var(--background)] text-[var(--foreground)] antialiased transition-colors duration-300;
+  }
+
+}
+
+@layer utilities {
+  .hide-scrollbar {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none !important;
+  }
+}

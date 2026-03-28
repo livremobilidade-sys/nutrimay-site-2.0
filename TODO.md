@@ -1,6 +1,7 @@
 # Pendências e Próximos Passos - NutriMay Site 2.0
 
 ## Tarefas Pendentes
+- [ ] **Desativar Modo de Desenvolvimento (CDN)**: Quando o site for lançado oficialmente para os clientes ou estivermos recebendo alto tráfego, devemos lembrar de voltar no painel da Hostinger ("Desempenho" > "Status do CDN") e **desativar** o Modo de Desenvolvimento. Isso vai religar o cache global, deixando o site incrivelmente rápido e protegendo o servidor.
 - [ ] **Sistema de Permissões de Administrador (Role-based Access Control)**: Substituir a verificação estática de e-mails (`header.tsx`) por uma verificação dinâmica de "Role" (nível de acesso) puxando o cargo diretamente da collection de usuários no Firebase. Isso permitirá escalar e adicionar novos perfis de funcionários e gerentes de forma segura.
 
 ## Tarefas Concluídas

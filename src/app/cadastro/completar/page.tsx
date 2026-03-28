@@ -29,6 +29,7 @@ export default function CompleteProfilePage() {
   const [referrerData, setReferrerData] = useState<any>(null);
   const [isCheckingCode, setIsCheckingCode] = useState(false);
   const [codeTypeStatus, setCodeTypeStatus] = useState<"idle" | "available" | "taken">("idle");
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -188,12 +189,16 @@ export default function CompleteProfilePage() {
       if (referrerData && formData.referralCode !== "LOCKED") {
         await updateDoc(doc(db, "users", referrerData.uid || referrerData.id), { referralCount: increment(1) });
       }
-      alert("Cadastro Sincronizado!");
-      if (finalStatus === "ACTIVE") {
-        router.push("/produtos");
-      } else {
-        router.push("/espera");
-      }
+      
+      setShowSuccessPopup(true);
+      setTimeout(() => {
+        if (finalStatus === "ACTIVE") {
+          router.push("/produtos");
+        } else {
+          router.push("/espera");
+        }
+      }, 2000);
+      
     } catch (err) { setErrors({ submit: "Erro ao salvar cadastro." });
     } finally { setSaving(false); }
   };
@@ -302,32 +307,34 @@ export default function CompleteProfilePage() {
                 </div>
              )}
 
-             {/* 2. CUSTOMIZE OWN CODE (Always available to share) */}
-             <div id="convite" className="p-10 rounded-[3rem] border border-amber-500/20 bg-amber-500/[0.02] space-y-6 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-20 bg-amber-500/5 blur-[100px] pointer-events-none" />
-                <div className="flex items-center gap-4 text-amber-500 mb-2">
-                   <Gift className="w-5 h-5" />
-                   <span className="text-[10px] font-black uppercase tracking-widest text-amber-500">Viral Marketing VIP</span>
+             {/* 2. CUSTOMIZE OWN CODE (Only available to ACTIVE users) */}
+             {formData.status === 'ACTIVE' && (
+                <div id="convite" className="p-10 rounded-[3rem] border border-amber-500/20 bg-amber-500/[0.02] space-y-6 relative overflow-hidden group">
+                   <div className="absolute top-0 right-0 p-20 bg-amber-500/5 blur-[100px] pointer-events-none" />
+                   <div className="flex items-center gap-4 text-amber-500 mb-2">
+                      <Gift className="w-5 h-5" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-500">Viral Marketing VIP</span>
+                   </div>
+                   <h4 className="text-xl font-black text-white uppercase tracking-tighter">Seu Código de Convite</h4>
+                   <p className="text-[10px] font-medium text-white/30 uppercase leading-relaxed">Membros que usarem seu código somam pontos no seu perfil de Membro Fundador.</p>
+                   <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder="PERSONALIZE SEU CÓDIGO"
+                        value={formData.myReferralCode}
+                        onChange={(e) => checkMyCodeUniqueness(e.target.value)}
+                        className={`w-full bg-white/5 border rounded-2xl py-6 px-7 text-white font-black text-xs uppercase outline-none transition-all ${codeTypeStatus === 'available' ? 'border-[#22C55E]' : codeTypeStatus === 'taken' ? 'border-red-500' : 'border-white/10 focus:border-amber-500/30'}`}
+                      />
+                      {isCheckingCode && <Loader2 className="absolute right-6 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500 animate-spin" />}
+                      {codeTypeStatus === 'available' && (
+                        <button type="button" onClick={shareViaWhatsApp} className="absolute right-3 top-1/2 -translate-y-1/2 p-3 bg-[#22C55E] text-black rounded-xl hover:scale-105 transition-all shadow-xl shadow-[#22C55E]/20">
+                           <Share2 className="w-4 h-4" />
+                        </button>
+                      )}
+                   </div>
+                   {codeTypeStatus === 'taken' && <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest">⚠️ Código em uso. Seja mais criativo!</p>}
                 </div>
-                <h4 className="text-xl font-black text-white uppercase tracking-tighter">Seu Código de Convite</h4>
-                <p className="text-[10px] font-medium text-white/30 uppercase leading-relaxed">Membros que usarem seu código somam pontos no seu perfil de Membro Fundador.</p>
-                <div className="relative">
-                   <input 
-                     type="text" 
-                     placeholder="PERSONALIZE SEU CÓDIGO"
-                     value={formData.myReferralCode}
-                     onChange={(e) => checkMyCodeUniqueness(e.target.value)}
-                     className={`w-full bg-white/5 border rounded-2xl py-6 px-7 text-white font-black text-xs uppercase outline-none transition-all ${codeTypeStatus === 'available' ? 'border-[#22C55E]' : codeTypeStatus === 'taken' ? 'border-red-500' : 'border-white/10 focus:border-amber-500/30'}`}
-                   />
-                   {isCheckingCode && <Loader2 className="absolute right-6 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500 animate-spin" />}
-                   {codeTypeStatus === 'available' && (
-                     <button type="button" onClick={shareViaWhatsApp} className="absolute right-3 top-1/2 -translate-y-1/2 p-3 bg-[#22C55E] text-black rounded-xl hover:scale-105 transition-all shadow-xl shadow-[#22C55E]/20">
-                        <Share2 className="w-4 h-4" />
-                     </button>
-                   )}
-                </div>
-                {codeTypeStatus === 'taken' && <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest">⚠️ Código em uso. Seja mais criativo!</p>}
-             </div>
+             )}
 
           </div>
 
@@ -343,6 +350,18 @@ export default function CompleteProfilePage() {
         </form>
 
       </div>
+      
+      {showSuccessPopup && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#09090b] border border-white/10 rounded-[2rem] p-8 max-w-sm w-full text-center shadow-2xl">
+               <div className="w-16 h-16 bg-[#22C55E]/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle2 className="w-8 h-8 text-[#22C55E]" />
+               </div>
+               <h3 className="text-xl font-black text-white uppercase tracking-tighter mb-2">Base Sincronizada!</h3>
+               <p className="text-xs text-neutral-400 uppercase font-medium">Seu perfil foi atualizado com sucesso na nossa nuvem VIP.</p>
+            </motion.div>
+         </div>
+      )}
     </main>
   );
 }

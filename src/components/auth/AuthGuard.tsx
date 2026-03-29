@@ -41,6 +41,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         if (snap.exists()) {
           const userData = snap.data();
           
+          if (userData.status === "BANNED") {
+            const { signOut } = await import("firebase/auth");
+            await signOut(auth);
+            window.location.href = "/";
+            return;
+          }
+
           if (!userData.profileComplete && pathname !== "/cadastro/completar") {
             router.push("/cadastro/completar");
             return;

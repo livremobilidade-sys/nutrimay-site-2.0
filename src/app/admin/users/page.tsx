@@ -65,12 +65,12 @@ export default function UsersAdmin() {
      if (window.confirm(confirmMsg)) {
         setProcessing(id);
         try {
-           console.log("🛠️ Enviando comando deleteDoc para Firestore...");
+           console.log("🛠️ Excluindo acesso (BANNED)...");
            const userDocRef = doc(db, "users", id);
            
-           await deleteDoc(userDocRef);
+           await updateDoc(userDocRef, { status: "BANNED" });
            
-           console.log("✅ Deleção concluída no Firestore.");
+           console.log("✅ Usuário banido.");
            alert("MEMBRO REMOVIDO COM SUCESSO! ✅");
            
            if (selectedUser?.id === id) setSelectedUser(null);
@@ -84,7 +84,8 @@ export default function UsersAdmin() {
   };
 
   const filteredUsers = users.filter(u => {
-    const matchesTab = activeTab === "ALL" || u.status === activeTab;
+    if (u.status === "BANNED") return false;
+    const matchesTab = (activeTab === "ALL" && u.status !== "BANNED") || u.status === activeTab;
     const matchesSearch = (u.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (u.email || "").toLowerCase().includes(searchTerm.toLowerCase());
     return matchesTab && matchesSearch;
   });
@@ -181,22 +182,64 @@ export default function UsersAdmin() {
                   <div className="flex justify-between items-start mb-10">
                      <div className="flex items-center gap-6">
                         <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
-                           {selectedUser.photoURL && <img src={selectedUser.photoURL} className="w-full h-full object-cover" />}
+                           {selectedUser.photoURL ? <img src={selectedUser.photoURL} className="w-full h-full object-cover" /> : <UserIcon className="w-10 h-10 text-white/20 m-5" />}
                         </div>
                         <div>
-                           <h3 className="text-2xl font-black text-white uppercase tracking-tighter">{selectedUser.name}</h3>
-                           <p className="text-[10px] text-white/30 uppercase tracking-widest">{selectedUser.email}</p>
+                           <h3 className="text-2xl font-black text-white uppercase tracking-tighter">{selectedUser.name || "Sem Nome"}</h3>
+                           <p className="text-[10px] text-[#22C55E] uppercase tracking-widest font-bold">{selectedUser.email}</p>
+                           <div className="mt-2 text-[9px] font-black uppercase text-white/30 tracking-widest px-2 py-0.5 border border-white/10 rounded-full inline-block">
+                             Status: {selectedUser.status}
+                           </div>
                         </div>
                      </div>
                      <button onClick={() => setSelectedUser(null)} className="p-4 text-white/20 hover:text-white"><X /></button>
                   </div>
                   
-                  <div className="space-y-4 pt-10 border-t border-white/5">
+                  <div className="grid grid-cols-2 gap-6 pt-6 border-t border-white/5 mb-8">
+                     <div className="space-y-1">
+                        <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">CPF</p>
+                        <p className="text-xs font-black text-white uppercase">{selectedUser.cpf || "N/A"}</p>
+                     </div>
+                     <div className="space-y-1">
+                        <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Telefone</p>
+                        <p className="text-xs font-black text-white uppercase">{selectedUser.phone || "N/A"}</p>
+                     </div>
+                     <div className="space-y-1">
+                        <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Endereço</p>
+                        <p className="text-[10px] font-black text-white uppercase">
+                          {selectedUser.street ? `${selectedUser.street}, ${selectedUser.number}` : "N/A"}
+                          {selectedUser.complement ? ` - ${selectedUser.complement}` : ""}
+                        </p>
+                     </div>
+                     <div className="space-y-1">
+                        <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Bairro / Cidade</p>
+                        <p className="text-[10px] font-black text-white uppercase">{selectedUser.neighborhood || "N/A"} • {selectedUser.city}/{selectedUser.state}</p>
+                     </div>
+                     <div className="space-y-1">
+                        <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Ponto de Retirada</p>
+                        <p className="text-[10px] font-black text-[#22C55E] uppercase">{selectedUser.pickupPoint || "N/A"}</p>
+                     </div>
+                     <div className="space-y-1">
+                        <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Códigos VIP</p>
+                        <p className="text-[10px] font-black text-amber-500 uppercase">Seu: {selectedUser.myReferralCode || "Nenhum"}</p>
+                        <p className="text-[10px] font-black text-white/50 uppercase">Usou: {selectedUser.referralCode || "Nenhum"}</p>
+                     </div>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-4 pt-6 border-t border-white/5">
+                     {selectedUser.status === 'PENDING' && (
+                        <button 
+                          onClick={(e) => { setSelectedUser(null); handleApprove(selectedUser.id); }}
+                          className="flex-1 py-4 bg-[#22C55E]/10 border border-[#22C55E]/20 text-[#22C55E] rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[#22C55E] hover:text-black transition-all shadow-xl"
+                        >
+                           <CheckCircle2 className="w-4 h-4 inline mr-2" /> Aprovar VIP
+                        </button>
+                     )}
                      <button 
                        onClick={(e) => handleDelete(e, selectedUser.id, selectedUser.name)}
-                       className="w-full py-5 bg-red-500/5 border border-red-500/20 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-xl"
+                       className="flex-1 py-4 bg-red-500/5 border border-red-500/20 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-xl"
                      >
-                        Remover da Base VIP Permanentemente
+                        Remover da Base
                      </button>
                   </div>
                </motion.div>

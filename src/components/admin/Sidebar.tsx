@@ -10,9 +10,8 @@ import { motion } from "framer-motion";
 
 const navItems = [
   { name: "Visão Geral", icon: BarChart2, href: "/admin" },
-  { name: "Clientes VIP", icon: Users, href: "/admin/users" },
+  { name: "Clientes", icon: Users, href: "/admin/users" },
   { name: "Gestão de Catálogo", icon: Package, href: "/admin/products" },
-  { name: "Aprovar Membros", icon: CheckCircle, href: "/admin/approvals" },
   { name: "Pontos de Retirada", icon: MapPin, href: "/admin/pickup-points" },
   { name: "Configurações", icon: Settings, href: "/admin/settings" },
 ];

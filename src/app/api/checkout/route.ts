@@ -27,11 +27,25 @@ export async function POST(request: Request) {
       });
     }
 
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://maynutri.com.br';
+
     const payload = {
       reference_id: `ORDER-${Date.now()}`,
+      customer_modifiable: true,
       items: pagbankItems,
-      // Minimal configuration
-      redirect_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/pedido/sucesso`
+      payment_methods: [
+        { type: "CREDIT_CARD", brands: ["MASTERCARD", "VISA", "ELO", "HIPERCARD", "AMEX"] },
+        { type: "DEBIT_CARD",   brands: ["MASTERCARD", "VISA", "ELO"] },
+        { type: "PIX" },
+        { type: "BOLETO" },
+      ],
+      redirect_url: `${baseUrl}/pedido/sucesso`,
+      return_url:   `${baseUrl}/pedido/sucesso`,
+      // Notifica o webhook quando o PAGAMENTO mudar de status (PAID, DECLINED, etc.)
+      payment_notification_urls: [`${baseUrl}/api/pagbank/webhook`],
+      // Notifica quando o CHECKOUT mudar de status (expirou, foi acessado, etc.)
+      notification_urls: [`${baseUrl}/api/pagbank/webhook`],
+      soft_descriptor: "MAYNUTRI",
     };
 
     console.log('--- PAYLOAD ENVIADO AO PAGBANK ---');

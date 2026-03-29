@@ -68,18 +68,21 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
 
   const getErrorMessage = (code: string) => {
     const messages: Record<string, string> = {
-      "auth/email-already-in-use": "Este e-mail já está cadastrado.",
-      "auth/wrong-password": "Senha incorreta.",
-      "auth/user-not-found": "E-mail não encontrado.",
+      "auth/email-already-in-use": "Este e-mail já está cadastrado. Tente fazer login.",
+      "auth/wrong-password": "Senha incorreta. Tente novamente.",
+      "auth/user-not-found": "E-mail não encontrado. Verifique ou crie uma conta.",
       "auth/invalid-email": "E-mail inválido.",
-      "auth/weak-password": "Senha muito fraca.",
+      "auth/weak-password": "Senha muito fraca. Use ao menos 6 caracteres.",
       "auth/popup-closed-by-user": "Login cancelado.",
-      "auth/too-many-requests": "Muitas tentativas. Aguarde.",
+      "auth/popup-blocked": "Popup bloqueado pelo navegador. Tente novamente ou use e-mail.",
+      "auth/cancelled-popup-request": "Login cancelado.",
+      "auth/too-many-requests": "Muitas tentativas. Aguarde alguns minutos.",
       "auth/invalid-credential": "E-mail ou senha incorretos.",
-      "auth/operation-not-allowed": "Vá no Firebase Console e habilite o login do Google/Apple em 'Authentication > Sign-in method'.",
-      "auth/unauthorized-domain": "Domínio Localhost não autorizado no Firebase Console. Adicione 'localhost' em 'Authentication > Settings > Authorized domains'.",
+      "auth/network-request-failed": "Sem conexão. Verifique sua internet.",
+      "auth/operation-not-allowed": "Este método de login ainda não está disponível. Por favor, use e-mail e senha ou Google.",
+      "auth/unauthorized-domain": "Acesso não autorizado neste domínio.",
     };
-    return messages[code] || `Erro: ${code}. Tente novamente.`;
+    return messages[code] || "Ocorreu um erro inesperado. Tente novamente.";
   };
 
   const checkProfileAndRedirect = async (user: any) => {

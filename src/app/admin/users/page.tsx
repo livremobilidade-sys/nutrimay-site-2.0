@@ -198,26 +198,26 @@ export default function UsersAdmin() {
                   <div className="grid grid-cols-2 gap-6 pt-6 border-t border-white/5 mb-8">
                      <div className="space-y-1">
                         <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">CPF</p>
-                        <p className="text-xs font-black text-white uppercase">{selectedUser.cpf || "N/A"}</p>
+                        <p className="text-xs font-black text-white uppercase">{selectedUser.cpf || "Não Informado"}</p>
                      </div>
                      <div className="space-y-1">
                         <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Telefone</p>
-                        <p className="text-xs font-black text-white uppercase">{selectedUser.phone || "N/A"}</p>
+                        <p className="text-xs font-black text-white uppercase">{selectedUser.phone || "Não Informado"}</p>
                      </div>
                      <div className="space-y-1">
                         <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Endereço</p>
                         <p className="text-[10px] font-black text-white uppercase">
-                          {selectedUser.street ? `${selectedUser.street}, ${selectedUser.number}` : "N/A"}
-                          {selectedUser.complement ? ` - ${selectedUser.complement}` : ""}
+                          {selectedUser.address?.street ? `${selectedUser.address.street}, ${selectedUser.address.number}` : "Não Informado"}
+                          {selectedUser.address?.complement ? ` - ${selectedUser.address.complement}` : ""}
                         </p>
                      </div>
                      <div className="space-y-1">
                         <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Bairro / Cidade</p>
-                        <p className="text-[10px] font-black text-white uppercase">{selectedUser.neighborhood || "N/A"} • {selectedUser.city}/{selectedUser.state}</p>
+                        <p className="text-[10px] font-black text-white uppercase">{selectedUser.address?.neighborhood || "Não Informado"} • {selectedUser.address?.city || ""}/{selectedUser.address?.state || ""}</p>
                      </div>
                      <div className="space-y-1">
                         <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Ponto de Retirada</p>
-                        <p className="text-[10px] font-black text-[#22C55E] uppercase">{selectedUser.pickupPoint || "N/A"}</p>
+                        <p className="text-[10px] font-black text-[#22C55E] uppercase">{selectedUser.pickupPoint || "Não Informado"}</p>
                      </div>
                      <div className="space-y-1">
                         <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Códigos VIP</p>

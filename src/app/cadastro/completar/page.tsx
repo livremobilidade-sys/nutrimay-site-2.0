@@ -254,6 +254,10 @@ export default function CompleteProfilePage() {
                     <div className="space-y-2">
                        <label className="text-[9px] font-black text-white/20 uppercase tracking-widest pl-1">Nome Completo</label>
                        <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-white/5 border border-white/5 rounded-2xl py-5 px-6 text-white font-bold text-xs uppercase outline-none" />
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[9px] font-black text-white/20 uppercase tracking-widest pl-1">CPF</label>
+                        <input type="text" value={formData.cpf} onChange={(e) => setFormData({...formData, cpf: e.target.value})} className="w-full bg-white/5 border border-white/5 rounded-2xl py-5 px-6 text-white font-bold text-xs outline-none" placeholder="000.000.000-00" />
                     </div>
                     <div className="space-y-2">
                        <label className="text-[9px] font-black text-white/20 uppercase tracking-widest pl-1">Sexo Visual</label>

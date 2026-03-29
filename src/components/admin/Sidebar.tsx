@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
   BarChart2, Users, Package, Settings, LogOut, 
-  CheckCircle, PlusCircle, LayoutDashboard, Search 
+  CheckCircle, PlusCircle, LayoutDashboard, Search, MapPin
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -13,6 +13,7 @@ const navItems = [
   { name: "Clientes VIP", icon: Users, href: "/admin/users" },
   { name: "Gestão de Catálogo", icon: Package, href: "/admin/products" },
   { name: "Aprovar Membros", icon: CheckCircle, href: "/admin/approvals" },
+  { name: "Pontos de Retirada", icon: MapPin, href: "/admin/pickup-points" },
   { name: "Configurações", icon: Settings, href: "/admin/settings" },
 ];
 

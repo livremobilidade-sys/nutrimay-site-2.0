@@ -51,7 +51,20 @@ export default function CompleteProfilePage() {
     status: "PENDING" // Current user status
   });
 
-  const pickupPoints = ["Smart Fit - Centro", "Bluefit - Jardins", "WeWork - Av. Paulista", "Condomínio Horizonte", "Academia BodyTech"];
+  const [pickupPoints, setPickupPoints] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchPoints = async () => {
+      try {
+        const q = query(collection(db, "pickupPoints"), where("active", "==", true));
+        const snap = await getDocs(q);
+        setPickupPoints(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+      } catch (err) {
+        console.error("Erro ao buscar pontos", err);
+      }
+    };
+    fetchPoints();
+  }, []);
 
   const validateCPF = (cpf: string) => {
     cpf = cpf.replace(/\D/g, "");
@@ -262,9 +275,9 @@ export default function CompleteProfilePage() {
                     </div>
                     <div className="space-y-2">
                        <label className="text-[9px] font-black text-white/20 uppercase tracking-widest pl-1">Ponto de Retirada</label>
-                       <select value={formData.pickupPoint} onChange={(e) => setFormData({...formData, pickupPoint: e.target.value})} className="w-full bg-white/5 border border-white/5 rounded-2xl py-5 px-6 text-white font-bold text-xs outline-none">
-                          <option value="">Selecione...</option>
-                          {pickupPoints.map(p => <option key={p} value={p}>{p}</option>)}
+                       <select value={formData.pickupPoint} onChange={(e) => setFormData({...formData, pickupPoint: e.target.value})} className="w-full bg-[#09090b] border border-white/5 rounded-2xl py-5 px-6 text-white font-bold text-xs outline-none focus:border-[#22C55E]/40 transition-all">
+                          <option value="" className="bg-[#09090b] text-white">Selecione o Hub Mais Próximo...</option>
+                          {pickupPoints.map(p => <option key={p.id} value={p.name} className="bg-[#09090b] text-white">{p.name} • {p.city}</option>)}
                        </select>
                     </div>
                     <div className="grid grid-cols-4 gap-4">

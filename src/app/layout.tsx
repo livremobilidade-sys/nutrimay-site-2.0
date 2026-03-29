@@ -16,8 +16,29 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MayNutri Frutas",
-  description: "Alta performance e nutrição",
+  title: "MayNutri | Frutas Premium para Alta Performance",
+  description: "Receba frutas frescas e selecionadas direto no seu ponto de retirada. Acesso exclusivo via convite. Alta performance, nutrição de verdade.",
+  metadataBase: new URL("https://maynutri.com.br"),
+  openGraph: {
+    title: "MayNutri | Frutas Premium para Alta Performance",
+    description: "Receba frutas frescas e selecionadas direto no seu ponto de retirada. Acesso exclusivo via convite.",
+    url: "https://maynutri.com.br",
+    siteName: "MayNutri",
+    locale: "pt_BR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MayNutri | Frutas Premium",
+    description: "Frutas frescas e selecionadas com acesso exclusivo. Entre na lista VIP.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  alternates: {
+    canonical: "https://maynutri.com.br",
+  },
 };
 
 export default function RootLayout({

@@ -53,21 +53,32 @@ function SuccessContent() {
   const transactionId =
     searchParams.get('transaction_id') ||
     searchParams.get('reference_id') ||
-    searchParams.get('code');
+    searchParams.get('code') ||
+    searchParams.get('id');
 
   useEffect(() => {
+    // Debug: log ALL url params so we know what PagBank is sending
+    const allParams: Record<string, string> = {};
+    searchParams.forEach((value, key) => { allParams[key] = value; });
+    console.log('🔍 [SuccessPage] URL params recebidos do PagBank:', allParams);
+
     if (!transactionId) {
+      console.warn('⚠️ [SuccessPage] Nenhum ID encontrado na URL, exibindo status pendente.');
       setStatus('pending');
       return;
     }
+    console.log('✅ [SuccessPage] Verificando pagamento com ID:', transactionId);
     const verify = async () => {
       try {
         const res = await fetch(`/api/pagbank/status?id=${transactionId}`);
-        if (!res.ok) { setStatus('pending'); return; }
         const data = await res.json();
+        console.log('📦 [SuccessPage] Resposta do status:', data);
+        if (!res.ok) { setStatus('pending'); return; }
         const s = (data.status || '').toUpperCase();
+        console.log('📊 [SuccessPage] Status normalizado:', s);
         if (s === 'PAID' || s === 'AUTHORIZED') setStatus('paid');
         else if (s === 'WAITING' || s === 'IN_ANALYSIS') setStatus('pending');
+
         else if (s === 'DECLINED' || s === 'CANCELED') setStatus('failed');
         else setStatus('pending');
       } catch {

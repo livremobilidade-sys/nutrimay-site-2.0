@@ -33,6 +33,7 @@ export default function PickupPointsAdmin() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<PickupPoint>({
     name: "",
@@ -136,14 +137,21 @@ export default function PickupPointsAdmin() {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (window.confirm("Deseja EXCLUIR PERMANENTEMENTE este Ponto de Retirada?")) {
-       try {
-          await deleteDoc(doc(db, "pickupPoints", id));
-       } catch (err) {
-          alert("Erro ao tentar deletar.");
-       }
+    setConfirmDeleteId(id);
+  };
+
+  const executeDelete = async () => {
+    if (!confirmDeleteId) return;
+    setProcessing(true);
+    try {
+       await deleteDoc(doc(db, "pickupPoints", confirmDeleteId));
+       setConfirmDeleteId(null);
+    } catch (err) {
+       alert("Erro ao tentar deletar.");
+    } finally {
+       setProcessing(false);
     }
   };
 
@@ -223,7 +231,7 @@ export default function PickupPointsAdmin() {
                      </td>
                      <td className="px-8 py-6 text-right">
                         <div className="flex items-center justify-end gap-4">
-                           <button onClick={(e) => handleDelete(e, point.id!)} className="p-3 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/10 hover:bg-red-500 hover:text-white transition-all active:scale-90">
+                           <button onClick={(e) => handleDeleteClick(e, point.id!)} className="p-3 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/10 hover:bg-red-500 hover:text-white transition-all active:scale-90">
                               <Trash2 className="w-4 h-4" />
                            </button>
                         </div>
@@ -315,6 +323,28 @@ export default function PickupPointsAdmin() {
                         </button>
                      </div>
                   </form>
+               </motion.div>
+            </div>
+         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+         {confirmDeleteId && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => setConfirmDeleteId(null)} />
+               <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} 
+                 className="relative w-full max-w-sm bg-[#0c0c0e] border border-red-500/20 rounded-3xl p-8 text-center shadow-[0_0_100px_rgba(239,68,68,0.2)]"
+               >
+                  <Trash2 className="w-16 h-16 text-red-500 mx-auto mb-6" />
+                  <h3 className="text-xl font-black text-white uppercase tracking-tighter mb-2">Excluir Hub Logístico?</h3>
+                  <p className="text-[10px] text-white/40 uppercase tracking-widest mb-8">Esta ação é irreversível e o ponto não estará mais disponível.</p>
+                  
+                  <div className="flex gap-4">
+                     <button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-white/50 bg-white/5 rounded-xl hover:bg-white/10 hover:text-white transition-all">Cancelar</button>
+                     <button onClick={executeDelete} disabled={processing} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-white bg-red-500 rounded-xl hover:bg-red-600 transition-all shadow-xl disabled:opacity-50">
+                        {processing ? "Excluindo..." : "Sim, Excluir"}
+                     </button>
+                  </div>
                </motion.div>
             </div>
          )}

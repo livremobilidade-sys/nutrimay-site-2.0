@@ -25,6 +25,7 @@ export default function UsersAdmin() {
   const [loading, setLoading] = useState(true);
   const [connError, setConnError] = useState<string | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Use a query without strict ordering to ensure all users show up
   useEffect(() => {
@@ -52,37 +53,27 @@ export default function UsersAdmin() {
      finally { setProcessing(null); }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
-     // 1. Force stop bubbling
+  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
      e.stopPropagation();
      e.preventDefault();
-
-     // 2. Initial alert to confirm the click was registered
-     console.log("🔥 [ADMIN] Tentativa de deleção iniciada para ID:", id);
-     
-     const confirmMsg = `⚠️ EXCLUIR PERMANENTEMENTE?\n\nMembro: ${name || 'N/A'}\nUID: ${id}\n\nDeseja continuar?`;
-     
-     if (window.confirm(confirmMsg)) {
-        setProcessing(id);
-        try {
-           console.log("🛠️ Excluindo acesso (BANNED)...");
-           const userDocRef = doc(db, "users", id);
-           
-           await updateDoc(userDocRef, { status: "BANNED" });
-           
-           console.log("✅ Usuário banido.");
-           alert("MEMBRO REMOVIDO COM SUCESSO! ✅");
-           
-           if (selectedUser?.id === id) setSelectedUser(null);
-        } catch (error) {
-           console.error("❌ ERRO CRÍTICO AO DELETAR:", error);
-           alert("FALHA NA EXCLUSÃO: " + (error as any).message);
-        } finally {
-           setProcessing(null);
-        }
-     }
+     setConfirmDeleteId(id);
   };
 
+  const executeDelete = async () => {
+      if (!confirmDeleteId) return;
+      setProcessing(confirmDeleteId);
+      try {
+         const userDocRef = doc(db, "users", confirmDeleteId);
+         await deleteDoc(userDocRef);
+         if (selectedUser?.id === confirmDeleteId) setSelectedUser(null);
+         setConfirmDeleteId(null);
+      } catch (error) {
+         console.error("❌ ERRO CRÍTICO AO DELETAR:", error);
+         alert("FALHA: Por favor, verifique as REGRAS DO FIRESTORE se a opção de 'delete' está 'allow read, write: if true;'. " + (error as any).message);
+      } finally {
+         setProcessing(null);
+      }
+  };
   const filteredUsers = users.filter(u => {
     if (u.status === "BANNED") return false;
     const matchesTab = (activeTab === "ALL" && u.status !== "BANNED") || u.status === activeTab;
@@ -158,7 +149,7 @@ export default function UsersAdmin() {
                               </button>
                            )}
                            <button 
-                             onClick={(e) => handleDelete(e, user.id, user.name)}
+                             onClick={(e) => handleDeleteClick(e, user.id)}
                              disabled={processing === user.id}
                              className="z-50 p-3 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/10 hover:bg-red-500 hover:text-white transition-all shadow-xl active:scale-90"
                            >
@@ -236,10 +227,33 @@ export default function UsersAdmin() {
                         </button>
                      )}
                      <button 
-                       onClick={(e) => handleDelete(e, selectedUser.id, selectedUser.name)}
-                       className="flex-1 py-4 bg-red-500/5 border border-red-500/20 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-xl"
+                       onClick={(e) => handleDeleteClick(e, selectedUser.id)}
+                       disabled={processing === selectedUser.id}
+                       className="flex-1 py-4 bg-red-500/5 border border-red-500/20 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-xl disabled:opacity-50"
                      >
                         Remover da Base
+                     </button>
+                  </div>
+               </motion.div>
+            </div>
+         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+         {confirmDeleteId && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => setConfirmDeleteId(null)} />
+               <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} 
+                 className="relative w-full max-w-sm bg-[#0c0c0e] border border-red-500/20 rounded-3xl p-8 text-center shadow-[0_0_100px_rgba(239,68,68,0.2)]"
+               >
+                  <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+                  <h3 className="text-xl font-black text-white uppercase tracking-tighter mb-2">Excluir Membro?</h3>
+                  <p className="text-[10px] text-white/40 uppercase tracking-widest mb-8">Esta ação é permanente e removerá todos os dados logísticos do sistema.</p>
+                  
+                  <div className="flex gap-4">
+                     <button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-white/50 bg-white/5 rounded-xl hover:bg-white/10 hover:text-white transition-all">Cancelar</button>
+                     <button onClick={executeDelete} disabled={processing === confirmDeleteId} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-white bg-red-500 rounded-xl hover:bg-red-600 transition-all shadow-xl disabled:opacity-50">
+                        {processing === confirmDeleteId ? "Deletando..." : "Sim, Excluir"}
                      </button>
                   </div>
                </motion.div>

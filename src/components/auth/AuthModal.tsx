@@ -184,10 +184,20 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             {authMode !== 'forgot' && (
               <div className="space-y-3 mb-8">
                 {socialButtons.map((btn) => (
-                  <button key={btn.name} onClick={() => handleSocialLogin(btn.provider)} disabled={loading} className={`w-full py-4 px-6 rounded-2xl flex items-center justify-center gap-4 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 ${btn.color}`}>
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill={btn.name === 'Apple' ? 'currentColor' : 'none'}>{btn.icon}</svg>
-                    <span className="text-[11px] font-black uppercase">{btn.label}</span>
-                  </button>
+                  btn.name === "Apple" ? (
+                    <div key={btn.name} className="relative group">
+                      <div className={`w-full py-4 px-6 rounded-2xl flex items-center justify-center gap-4 opacity-30 cursor-not-allowed select-none pointer-events-none ${btn.color}`}>
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">{btn.icon}</svg>
+                        <span className="text-[11px] font-black uppercase">{btn.label}</span>
+                        <span className="text-[9px] font-black uppercase text-black/50 ml-1">• Em breve</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <button key={btn.name} onClick={() => handleSocialLogin(btn.provider)} disabled={loading} className={`w-full py-4 px-6 rounded-2xl flex items-center justify-center gap-4 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 ${btn.color}`}>
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill={btn.name === 'Apple' ? 'currentColor' : 'none'}>{btn.icon}</svg>
+                      <span className="text-[11px] font-black uppercase">{btn.label}</span>
+                    </button>
+                  )
                 ))}
               </div>
             )}

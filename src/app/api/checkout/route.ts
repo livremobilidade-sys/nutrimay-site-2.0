@@ -8,7 +8,7 @@ const PAGBANK_URL = process.env.PAGBANK_ENV === 'production'
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { items, thermalBagOption } = body;
+    const { items, thermalBagOption, customer } = body;
 
     // Build items with strict integers for unit_amount
     const pagbankItems = items.map((item: any) => ({
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://maynutri.com.br';
 
-    const payload = {
+    const payload: any = {
       reference_id: `ORDER-${Date.now()}`,
       customer_modifiable: true,
       items: pagbankItems,
@@ -41,12 +41,25 @@ export async function POST(request: Request) {
       ],
       redirect_url: `${baseUrl}/pedido/sucesso`,
       return_url:   `${baseUrl}/pedido/sucesso`,
-      // Notifica o webhook quando o PAGAMENTO mudar de status (PAID, DECLINED, etc.)
       payment_notification_urls: [`${baseUrl}/api/pagbank/webhook`],
-      // Notifica quando o CHECKOUT mudar de status (expirou, foi acessado, etc.)
       notification_urls: [`${baseUrl}/api/pagbank/webhook`],
       soft_descriptor: "MAYNUTRI",
     };
+
+    // Adiciona dados do cliente se disponíveis (preenche o formulário do PagBank)
+    if (customer) {
+      payload.customer = {
+        name: customer.name || 'Cliente MayNutri',
+        email: customer.email,
+        tax_id: customer.cpf?.replace(/\D/g, ''),
+        phones: customer.phone ? [{
+          country: '55',
+          area: customer.phone.replace(/\D/g, '').substring(0, 2),
+          number: customer.phone.replace(/\D/g, '').substring(2),
+          type: 'MOBILE'
+        }] : []
+      };
+    }
 
     console.log('--- PAYLOAD ENVIADO AO PAGBANK ---');
     console.log(JSON.stringify(payload, null, 2));

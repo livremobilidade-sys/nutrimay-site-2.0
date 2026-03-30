@@ -239,16 +239,15 @@ export default function CheckoutPage() {
         phone: formData.phone
       });
 
-      const res = await fetch('/api/checkout/simulate', {
+      // CHAMADA REAL PARA O PAGBANK
+      const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items,
           customer: formData,
-          paymentMethod,
           pickupPoint,
-          thermalBagOption,
-          total: finalTotal
+          thermalBagOption
         })
       });
 
@@ -256,14 +255,11 @@ export default function CheckoutPage() {
 
       if (data.error) throw new Error(data.error);
 
-      if (paymentMethod === 'pix' && data.pixQrCode) {
-        setPixData({ qrcode: data.pixQrCode, text: data.pixCopiaECola });
+      // Redireciona para o checkout do PagBank (Cartão ou PIX lá dentro)
+      if (data.url) {
+        window.location.href = data.url;
       } else {
-        setSuccessData({ orderId: data.orderId, message: data.message });
-        setTimeout(() => {
-          clearCart();
-          router.push('/pedido/sucesso');
-        }, 3000);
+        throw new Error('Link de pagamento não recebido.');
       }
 
     } catch (err: any) {

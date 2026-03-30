@@ -115,7 +115,6 @@ export async function POST(request: Request) {
     console.error('[CHECKOUT][ERROR]', {
       message: error.message,
       stack: error.stack,
-      payload: body,
     });
     const status = error.message?.includes('É necessário') ||
       error.message?.includes('obrigatório') ? 400 : 500;

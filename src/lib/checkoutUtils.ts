@@ -13,9 +13,15 @@ export interface CheckoutCustomer {
 }
 
 /**
- * Remove caracteres não numéricos do CPF.
+ * Remove caracteres não numéricos do CPF e valida.
  */
-export const cleanCpf = (cpf: string): string => cpf.replace(/\D/g, "");
+export const cleanCpf = (cpf: string): string => {
+  const cleaned = cpf.replace(/\D/g, "");
+  if (cleaned.length !== 11 && cleaned.length !== 14) {
+    throw new Error(`CPF/CNPJ inválido: deve ter 11 ou 14 dígitos`);
+  }
+  return cleaned;
+};
 
 /**
  * Formata telefone para o padrão esperado pelo PagBank.
@@ -24,11 +30,21 @@ export const cleanCpf = (cpf: string): string => cpf.replace(/\D/g, "");
 export const formatPhone = (phone?: string) => {
   if (!phone) return undefined;
   const digits = phone.replace(/\D/g, "");
-  if (digits.length < 10) return undefined;
+  if (digits.length < 10 || digits.length > 11) return undefined;
+  
+  const area = digits.substring(0, 2);
+  let number = digits.substring(2);
+  
+  if (number.length === 8) {
+    number = "9" + number;
+  }
+  
+  if (number.length !== 9) return undefined;
+  
   return {
     country: "55",
-    area: digits.substring(0, 2),
-    number: digits.substring(2),
+    area,
+    number,
   };
 };
 
@@ -54,5 +70,7 @@ export const validateCheckoutPayload = (
   if (customer) {
     if (!customer.email) throw new Error("E‑mail do cliente é obrigatório.");
     if (!customer.cpf) throw new Error("CPF do cliente é obrigatório.");
+    const cleanedCpf = customer.cpf.replace(/\D/g, "");
+    if (cleanedCpf.length !== 11) throw new Error("CPF deve ter 11 dígitos.");
   }
 };

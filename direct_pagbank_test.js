@@ -18,17 +18,44 @@ const PAGBANK_URL = env.PAGBANK_ENV === 'production'
   ? 'https://api.pagseguro.com/checkouts' 
   : 'https://sandbox.api.pagseguro.com/checkouts';
 
+const baseUrl = env.NEXT_PUBLIC_BASE_URL || 'https://checkout-teste.nutrimay.com';
+
 const payload = {
   reference_id: `ORDER-${Date.now()}`,
+  customer_modifiable: true,
   items: [
     {
-      reference_id: '123',
-      name: 'Morango',
+      reference_id: 'shaker-morango',
+      name: 'Shaker Morango',
+      quantity: 2,
+      unit_amount: 2500
+    },
+    {
+      reference_id: 'bolsa-termica',
+      name: 'Bolsa Térmica',
       quantity: 1,
-      unit_amount: 550
+      unit_amount: 1000
     }
   ],
-  redirect_url: 'http://127.0.0.1:3000/pedido/sucesso' // Test with 127.0.0.1
+  payment_methods: [
+    { type: "CREDIT_CARD", brands: ["MASTERCARD", "VISA", "ELO", "HIPERCARD", "AMEX"] },
+    { type: "PIX" },
+    { type: "BOLETO" },
+  ],
+  redirect_url: `${baseUrl}/pedido/sucesso`,
+  return_url: `${baseUrl}/pedido/sucesso`,
+  notification_urls: [`${baseUrl}/api/pagbank/webhook`],
+  soft_descriptor: "MAYNUTRI",
+  customer: {
+    name: 'João da Silva',
+    email: 'joao@exemplo.com',
+    tax_id: '12345678909',
+    phone: {
+      country: '55',
+      area: '11',
+      number: '999999999'
+    }
+  }
 };
 
 async function test() {

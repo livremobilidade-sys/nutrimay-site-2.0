@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-
+import { CheckoutItem, CheckoutCustomer, cleanCpf, formatPhone, validateCheckoutPayload } from '@/lib/checkoutUtils';
 const PAGBANK_TOKEN = process.env.PAGBANK_TOKEN?.trim();
 const PAGBANK_URL = process.env.PAGBANK_ENV === 'production' 
   ? 'https://api.pagseguro.com/checkouts' 
@@ -8,14 +8,25 @@ const PAGBANK_URL = process.env.PAGBANK_ENV === 'production'
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { items, thermalBagOption, customer } = body;
+    const {
+  items,
+  thermalBagOption,
+  customer,
+}: {
+  items: CheckoutItem[];
+  thermalBagOption?: 'new' | 'exchange';
+  customer?: CheckoutCustomer;
+} = body;
 
-    // Build items with strict integers for unit_amount
-    const pagbankItems = items.map((item: any) => ({
+    // Validação do payload
+    validateCheckoutPayload(items, customer);
+
+    // Monta itens no formato esperado pelo PagBank
+    const pagbankItems = items.map((item) => ({
       reference_id: String(item.id).substring(0, 64),
       name: String(item.name).replace(/[\[\]]/g, '').substring(0, 100),
       quantity: Math.max(1, Math.floor(Number(item.quantity)) || 1),
-      unit_amount: Math.floor(Math.round(Number(item.price) * 100))
+      unit_amount: Math.floor(Math.round(Number(item.price) * 100)),
     }));
 
     if (thermalBagOption === 'new') {
@@ -46,18 +57,13 @@ export async function POST(request: Request) {
       soft_descriptor: "MAYNUTRI",
     };
 
-    // Adiciona dados do cliente se disponíveis (preenche o formulário do PagBank)
+    // Adiciona dados do cliente (se houver) usando utilitários de sanitização
     if (customer) {
       payload.customer = {
-        name: customer.name || 'Cliente MayNutri',
+        name: customer.name ?? 'Cliente MayNutri',
         email: customer.email,
-        tax_id: customer.cpf?.replace(/\D/g, ''),
-        phones: customer.phone ? [{
-          country: '55',
-          area: customer.phone.replace(/\D/g, '').substring(0, 2),
-          number: customer.phone.replace(/\D/g, '').substring(2),
-          type: 'MOBILE'
-        }] : []
+        tax_id: cleanCpf(customer.cpf),
+        phone: formatPhone(customer.phone),
       };
     }
 
@@ -98,13 +104,24 @@ export async function POST(request: Request) {
       throw new Error('Link de pagamento (rel: PAY) não encontrado.');
     }
 
-    return NextResponse.json({ url: checkoutLink });
+    return NextResponse.json({
+  url: checkoutLink,
+  reference_id: payload.reference_id,
+  payload,
+});
 
   } catch (error: any) {
-    console.error('SERVER ERROR:', error.message);
+    // Log estruturado para monitoramento
+    console.error('[CHECKOUT][ERROR]', {
+      message: error.message,
+      stack: error.stack,
+      payload: body,
+    });
+    const status = error.message?.includes('É necessário') ||
+      error.message?.includes('obrigatório') ? 400 : 500;
     return NextResponse.json(
       { error: error.message || 'Erro interno no servidor' },
-      { status: 500 }
+      { status }
     );
   }
 }

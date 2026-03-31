@@ -350,7 +350,16 @@ export default function CheckoutPage() {
         cardBrandFinal = brand;
         
         const [month, year] = formData.cardExpiry.split('/');
-        const publicKey = process.env.NEXT_PUBLIC_PAGBANK_PUBLIC_KEY || '';
+        const publicKey = process.env.NEXT_PUBLIC_PAGBANK_PUBLIC_KEY;
+        
+        console.log('Public key exists:', !!publicKey);
+        console.log('Public key length:', publicKey?.length);
+        
+        if (!publicKey) {
+          throw new Error('Chave pública não configurada. Contate o administrador.');
+        }
+        
+        console.log('Encrypting card with publicKey...');
         
         const result = window.PagSeguro.encryptCard({
           publicKey,

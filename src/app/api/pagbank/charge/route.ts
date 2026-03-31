@@ -58,13 +58,7 @@ export async function POST(request: Request) {
       reference_id: referenceId,
       customer: {
         name: customer?.name ?? 'Cliente MayNutri',
-        email: customer?.email,
-        phones: [
-          {
-            type: 'MOBILE',
-            number: formatPhone(customer?.phone || ''),
-          },
-        ],
+        email: customer?.email || 'cliente@email.com',
       },
       items: pagbankItems,
       notification_urls: [`${baseUrl}/api/pagbank/webhook`],
@@ -76,8 +70,14 @@ export async function POST(request: Request) {
         throw new Error('Cartão criptografado é obrigatório para pagamento com cartão');
       }
       
+      const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);
+      
       payload.charges.push({
         reference_id: `CHARGE-${Date.now()}`,
+        amount: {
+          value: totalAmount,
+          currency: 'BRL',
+        },
         payment_method: {
           type: 'CREDIT_CARD',
           installments: installments,
@@ -92,8 +92,14 @@ export async function POST(request: Request) {
         },
       });
     } else if (paymentMethod === 'pix') {
+      const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);
+      
       payload.charges.push({
-        type: 'PIX',
+        reference_id: `CHARGE-${Date.now()}`,
+        amount: {
+          value: totalAmount,
+          currency: 'BRL',
+        },
         payment_method: {
           type: 'PIX',
           pix: {
@@ -108,7 +114,6 @@ export async function POST(request: Request) {
     console.log('Encrypted card (first 50 chars):', encryptedCard?.substring(0, 50));
     console.log('Card brand:', cardBrand);
     console.log('Cardholder:', cardHolderName);
-    console.log('Customer CPF:', customer?.cpf);
 
     const response = await fetch(PAGBANK_URL, {
       method: 'POST',
@@ -123,18 +128,23 @@ export async function POST(request: Request) {
     const text = await response.text();
     console.log('--- RESPOSTA BRUTA DO PAGBANK ---');
     console.log(text);
+    console.log('--- PAYLOAD COMPLETO ---');
+    console.log(JSON.stringify(payload));
 
     let data;
     try {
       data = JSON.parse(text);
     } catch (e) {
-      throw new Error('Resposta do PagBank não é um JSON válido: ' + text.substring(0, 100));
+      throw new Error('Resposta do PagBank não é um JSON válido: ' + text.substring(0, 200));
     }
 
     if (!response.ok) {
+      console.error('--- ERRO DO PAGBANK ---');
+      console.error('Status:', response.status);
+      console.error('Response:', JSON.stringify(data));
       const message = data.error_messages 
         ? data.error_messages.map((m: any) => `${m.parameter || 'root'}: ${m.description}`).join(' | ') 
-        : data.message || 'Erro retornado pelo PagBank';
+        : data.message || `Erro retornado pelo PagBank (status ${response.status})`;
       throw new Error(message);
     }
 

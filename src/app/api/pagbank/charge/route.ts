@@ -54,21 +54,11 @@ export async function POST(request: Request) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://maynutri.com.br';
     const referenceId = `ORDER-${Date.now()}`;
 
-    let customerTaxId: string | undefined;
-    if (customer?.cpf) {
-      try {
-        customerTaxId = cleanCpf(customer.cpf);
-      } catch (e) {
-        console.warn('CPF inválido, enviando sem tax_id');
-      }
-    }
-
     const payload: any = {
       reference_id: referenceId,
       customer: {
         name: customer?.name ?? 'Cliente MayNutri',
         email: customer?.email,
-        ...(customerTaxId && { tax_id: customerTaxId }),
         phones: [
           {
             type: 'MOBILE',
@@ -86,15 +76,6 @@ export async function POST(request: Request) {
         throw new Error('Cartão criptografado é obrigatório para pagamento com cartão');
       }
       
-      let customerCpf: string | undefined;
-      if (customer?.cpf) {
-        try {
-          customerCpf = cleanCpf(customer.cpf);
-        } catch (e) {
-          console.warn('CPF inválido, enviando sem CPF');
-        }
-      }
-      
       payload.charges.push({
         type: 'CARD',
         payment_method: {
@@ -104,7 +85,6 @@ export async function POST(request: Request) {
             brand: cardBrand?.toUpperCase() || 'UNKNOWN',
             holder: {
               name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
-              ...(customerCpf && { tax_id: customerCpf }),
             },
           },
           installments: installments,

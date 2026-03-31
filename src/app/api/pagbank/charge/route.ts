@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { CheckoutItem, CheckoutCustomer, cleanCpf, formatPhone, validateCheckoutPayload } from '@/lib/checkoutUtils';
+import { db } from '@/lib/firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 const PAGBANK_TOKEN = process.env.PAGBANK_TOKEN?.trim();
 const PAGBANK_URL = process.env.PAGBANK_ENV === 'production' 
@@ -18,6 +20,7 @@ export async function POST(request: Request) {
       cardBrand,
       installments = 1,
       cardHolderName,
+      userId,
     }: {
       items: CheckoutItem[];
       thermalBagOption?: 'new' | 'exchange';
@@ -27,6 +30,7 @@ export async function POST(request: Request) {
       cardBrand?: string | null;
       installments?: number;
       cardHolderName?: string;
+      userId?: string;
     } = body;
 
     validateCheckoutPayload(items, customer);
@@ -164,6 +168,33 @@ export async function POST(request: Request) {
         status: charge?.status || 'PROCESSING',
         cardBrand: charge?.payment_method?.card?.brand,
       };
+    }
+
+    if (customer?.email) {
+      try {
+        await addDoc(collection(db, 'orders'), {
+          referenceId: referenceId,
+          orderId: orderId,
+          pagbankOrderId: orderId,
+          userId: userId || null,
+          userEmail: customer.email,
+          userName: customer.name,
+          userCpf: customer.cpf,
+          status: paymentData.status,
+          paymentMethod,
+          total: totalAmount / 100,
+          items: pagbankItems.map(item => ({
+            name: item.name,
+            quantity: item.quantity,
+            unitAmount: item.unit_amount,
+          })),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        console.log('Order saved to Firestore:', referenceId);
+      } catch (saveErr) {
+        console.error('Error saving order to Firestore:', saveErr);
+      }
     }
 
     return NextResponse.json(paymentData);

@@ -75,6 +75,7 @@ export default function CheckoutPage() {
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState<'loading' | 'success' | 'error'>('loading');
   const [modalMessage, setModalMessage] = useState('');
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
     console.log('PUDIM - Nova versao com charges array');
@@ -106,6 +107,7 @@ export default function CheckoutPage() {
     loadPagBankScript();
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
       if (user) {
         try {
           const userDoc = await getDoc(doc(db, "users", user.uid));
@@ -385,9 +387,11 @@ export default function CheckoutPage() {
           throw new Error(errorMessages || 'Erro ao criptografar cartão');
         }
         
-        encryptedCard = result.encryptedCard;
+          encryptedCard = result.encryptedCard;
       }
 
+      const userId = currentUser?.uid;
+      
       const res = await fetch('/api/pagbank/charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -401,6 +405,7 @@ export default function CheckoutPage() {
           cardBrand: cardBrandFinal,
           installments: selectedInstallment,
           cardHolderName,
+          userId,
         })
       });
 
@@ -429,7 +434,7 @@ export default function CheckoutPage() {
           setModalMessage('Pagamento aprovado! Obrigado pela compra.');
           setTimeout(() => {
             clearCart();
-            router.push('/pedido/sucesso');
+            router.push('/pedidos');
           }, 2000);
         } else {
           setModalType('error');
@@ -512,7 +517,7 @@ export default function CheckoutPage() {
           <button 
             onClick={() => {
               clearCart();
-              router.push('/pedido/sucesso');
+              router.push('/pedidos');
             }}
             className="w-full mt-4 py-4 rounded-xl bg-[#22C55E] text-black font-bold uppercase tracking-tight hover:scale-[1.02] transition-transform"
           >

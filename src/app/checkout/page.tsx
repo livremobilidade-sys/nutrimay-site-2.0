@@ -74,7 +74,7 @@ export default function CheckoutPage() {
   const [cardHolderName, setCardHolderName] = useState("");
 
   useEffect(() => {
-    console.log('ALHO - Checkout page mounted');
+    console.log('LUA - Checkout page mounted');
     setMounted(true);
 
     const loadPagBankScript = async () => {

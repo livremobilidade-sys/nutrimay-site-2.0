@@ -54,12 +54,21 @@ export async function POST(request: Request) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://maynutri.com.br';
     const referenceId = `ORDER-${Date.now()}`;
 
+    let customerTaxId: string | undefined;
+    if (customer?.cpf) {
+      try {
+        customerTaxId = cleanCpf(customer.cpf);
+      } catch (e) {
+        console.warn('CPF inválido, enviando sem tax_id');
+      }
+    }
+
     const payload: any = {
       reference_id: referenceId,
       customer: {
         name: customer?.name ?? 'Cliente MayNutri',
         email: customer?.email,
-        tax_id: cleanCpf(customer?.cpf || ''),
+        ...(customerTaxId && { tax_id: customerTaxId }),
         phones: [
           {
             type: 'MOBILE',

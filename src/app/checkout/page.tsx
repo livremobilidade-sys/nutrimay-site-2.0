@@ -74,6 +74,7 @@ export default function CheckoutPage() {
   const [cardHolderName, setCardHolderName] = useState("");
 
   useEffect(() => {
+    console.log('COLHER - Checkout page mounted');
     setMounted(true);
 
     const loadPagBankScript = async () => {
@@ -350,16 +351,19 @@ export default function CheckoutPage() {
         cardBrandFinal = brand;
         
         const [month, year] = formData.cardExpiry.split('/');
-        const publicKey = process.env.NEXT_PUBLIC_PAGBANK_PUBLIC_KEY;
         
-        console.log('BATATA DOCE - Public key exists:', !!publicKey);
-        console.log('BATATA DOCE - Public key length:', publicKey?.length);
+        const pkRes = await fetch('/api/pagbank/public-key');
+        const pkData = await pkRes.json();
+        const publicKey = pkData.publicKey;
+        
+        console.log('COLHER - Public key exists:', !!publicKey);
+        console.log('COLHER - Public key length:', publicKey?.length);
         
         if (!publicKey) {
           throw new Error('Chave pública não configurada. Contate o administrador.');
         }
         
-        console.log('Encrypting card with publicKey...');
+        console.log('COLHER - Encrypting card with publicKey...');
         
         const result = window.PagSeguro.encryptCard({
           publicKey,

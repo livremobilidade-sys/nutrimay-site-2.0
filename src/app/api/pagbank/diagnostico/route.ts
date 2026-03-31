@@ -1,23 +1,52 @@
 import { NextResponse } from 'next/server';
 
 const PAGBANK_TOKEN = process.env.PAGBANK_TOKEN?.trim();
-const PAGBANK_ENV = process.env.PAGBANK_ENV || 'sandbox';
-const PAGBANK_URL = PAGBANK_ENV === 'production'
-  ? 'https://api.pagseguro.com/checkouts'
-  : 'https://sandbox.api.pagseguro.com/checkouts';
+const PAGBANK_URL = process.env.PAGBANK_ENV === 'production' 
+  ? 'https://api.pagseguro.com/orders'
+  : 'https://sandbox.api.pagseguro.com/orders';
 
-export async function GET() {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://maynutri.com.br';
-
-  // Test payload mínimo
-  const payload = {
-    reference_id: `DIAG-${Date.now()}`,
-    items: [{ reference_id: 'test-001', name: 'Teste Diagnóstico', quantity: 1, unit_amount: 100 }],
-    redirect_url: `${baseUrl}/pedido/sucesso`,
-    payment_notification_urls: [`${baseUrl}/api/pagbank/webhook`],
-  };
-
+export async function POST(request: Request) {
   try {
+    const body = await request.json();
+    const { testType } = body;
+
+    console.log('--- DIAGNOSTICO PAGBANK ---');
+    console.log('Test type:', testType);
+
+    const testPayload: any = {
+      reference_id: `DIAG-${Date.now()}`,
+      customer: {
+        name: 'Teste Cliente',
+        email: 'teste@email.com',
+      },
+      items: [
+        {
+          reference_id: 'test-item-1',
+          name: 'Item Teste',
+          quantity: 1,
+          unit_amount: 1000,
+        },
+      ],
+      notification_urls: ['https://maynutri.com.br/api/pagbank/webhook'],
+    };
+
+    if (testType === 'PIX') {
+      testPayload.charge = {
+        amount: {
+          value: 1000,
+          currency: 'BRL',
+        },
+        payment_method: {
+          type: 'PIX',
+          pix: {
+            expiration_time: 3600,
+          },
+        },
+      };
+    }
+
+    console.log('Test payload:', JSON.stringify(testPayload, null, 2));
+
     const response = await fetch(PAGBANK_URL, {
       method: 'POST',
       headers: {
@@ -25,27 +54,31 @@ export async function GET() {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(testPayload),
     });
 
     const text = await response.text();
-    let data: unknown;
-    try { data = JSON.parse(text); } catch { data = text; }
+    console.log('Response status:', response.status);
+    console.log('Response body:', text.substring(0, 500));
 
-    const payLink = (data as { links?: { rel: string; href: string }[] })?.links?.find((l) => l.rel === 'PAY')?.href;
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
 
     return NextResponse.json({
-      env: PAGBANK_ENV,
-      api_url: PAGBANK_URL,
-      token_prefix: PAGBANK_TOKEN?.substring(0, 12) + '...',
-      http_status: response.status,
-      http_ok: response.ok,
-      pay_link: payLink || null,
-      pay_link_is_sandbox: payLink?.includes('sandbox') ?? null,
-      response: data,
+      testType,
+      status: response.status,
+      response: parsed,
     });
-  } catch (err: unknown) {
-    const error = err as Error;
-    return NextResponse.json({ error: error.message }, { status: 500 });
+
+  } catch (error: any) {
+    console.error('Diagnostico error:', error.message);
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
 }

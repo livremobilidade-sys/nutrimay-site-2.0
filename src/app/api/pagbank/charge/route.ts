@@ -77,18 +77,18 @@ export async function POST(request: Request) {
       }
       
       payload.charges.push({
-        type: 'CARD',
+        reference_id: `CHARGE-${Date.now()}`,
         payment_method: {
           type: 'CREDIT_CARD',
-          card: {
-            encrypted: encryptedCard,
-            brand: cardBrand?.toUpperCase() || 'UNKNOWN',
-            holder: {
-              name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
-            },
-          },
           installments: installments,
           capture: true,
+          card: {
+            encrypted: encryptedCard,
+            store: false,
+          },
+          holder: {
+            name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
+          },
         },
       });
     } else if (paymentMethod === 'pix') {

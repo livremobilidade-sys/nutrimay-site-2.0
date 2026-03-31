@@ -74,7 +74,7 @@ export default function CheckoutPage() {
   const [cardHolderName, setCardHolderName] = useState("");
 
   useEffect(() => {
-    console.log('CARRO - Checkout page mounted');
+    console.log('TATU - Checkout page mounted');
     setMounted(true);
 
     const loadPagBankScript = async () => {
@@ -356,14 +356,14 @@ export default function CheckoutPage() {
         const pkData = await pkRes.json();
         const publicKey = pkData.publicKey;
         
-        console.log('CARRO - Public key exists:', !!publicKey);
-        console.log('CARRO - Public key length:', publicKey?.length);
+        console.log('TATU - Public key exists:', !!publicKey);
+        console.log('TATU - Public key length:', publicKey?.length);
         
         if (!publicKey) {
           throw new Error('Chave pública não configurada. Contate o administrador.');
         }
         
-        console.log('CARRO - Encrypting card with publicKey...');
+        console.log('TATU - Encrypting card with publicKey...');
         
         const result = window.PagSeguro.encryptCard({
           publicKey,

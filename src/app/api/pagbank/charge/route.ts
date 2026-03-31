@@ -92,15 +92,15 @@ export async function POST(request: Request) {
         },
       }];
     } else if (paymentMethod === 'pix') {
-      (payload as any).charges = [{
-        reference_id: `CHARGE-${Date.now()}`,
+      const now = new Date();
+      now.setHours(now.getHours() + 1);
+      const expirationDate = now.toISOString();
+      
+      (payload as any).qr_codes = [{
         amount: {
           value: totalAmount,
-          currency: 'BRL',
         },
-        payment_method: {
-          type: 'PIX',
-        },
+        expiration_date: expirationDate,
       }];
     }
 
@@ -142,6 +142,7 @@ export async function POST(request: Request) {
     console.log('Order created:', orderId);
     
     const charge = data.charges?.[0];
+    const qrCode = data.qr_codes?.[0];
     let paymentData: any = {
       reference_id: referenceId,
       orderId: orderId,
@@ -152,10 +153,10 @@ export async function POST(request: Request) {
       paymentData = {
         ...paymentData,
         pix: {
-          qrcode: charge?.payment_method?.pix?.qr_code?.image?.plain,
-          text: charge?.payment_method?.pix?.qr_code?.text,
+          qrcode: qrCode?.links?.find((l: any) => l.rel === 'QRCODE.PNG')?.href,
+          text: qrCode?.text,
         },
-        status: charge?.status || 'WAITING_PAYMENT',
+        status: 'WAITING_PAYMENT',
       };
     } else if (paymentMethod === 'credit_card') {
       paymentData = {

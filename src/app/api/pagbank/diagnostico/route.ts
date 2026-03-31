@@ -32,15 +32,13 @@ export async function POST(request: Request) {
     };
 
     if (testType === 'PIX') {
-      testPayload.charges = [{
-        reference_id: `CHARGE-${Date.now()}`,
+      const now = new Date();
+      now.setHours(now.getHours() + 1);
+      testPayload.qr_codes = [{
         amount: {
           value: 1000,
-          currency: 'BRL',
         },
-        payment_method: {
-          type: 'PIX',
-        },
+        expiration_date: now.toISOString(),
       }];
     } else if (testType === 'CREDIT_CARD') {
       testPayload.charges = [{

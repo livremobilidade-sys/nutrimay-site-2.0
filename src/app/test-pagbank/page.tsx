@@ -7,7 +7,7 @@ export default function TestPagBank() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setResult("Página carregada. Clique em um botão para testar.");
+    setResult("MELAO - Página carregada. Clique em um botão para testar.");
   }, []);
 
   const runTest = async (testType: string) => {

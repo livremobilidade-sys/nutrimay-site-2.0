@@ -74,7 +74,7 @@ export default function CheckoutPage() {
   const [cardHolderName, setCardHolderName] = useState("");
 
   useEffect(() => {
-    console.log('CADA - Checkout page mounted');
+    console.log('MELAO - Versao atualizada com CPF valido');
     setMounted(true);
 
     const loadPagBankScript = async () => {
@@ -356,14 +356,14 @@ export default function CheckoutPage() {
         const pkData = await pkRes.json();
         const publicKey = pkData.publicKey;
         
-        console.log('CADA - Public key exists:', !!publicKey);
-        console.log('CADA - Public key length:', publicKey?.length);
+        console.log('MELAO - Public key exists:', !!publicKey);
+        console.log('MELAO - Public key length:', publicKey?.length);
         
         if (!publicKey) {
           throw new Error('Chave pública não configurada. Contate o administrador.');
         }
         
-        console.log('CADA - Encrypting card with publicKey...');
+        console.log('MELAO - Encrypting card with publicKey...');
         
         const result = window.PagSeguro.encryptCard({
           publicKey,

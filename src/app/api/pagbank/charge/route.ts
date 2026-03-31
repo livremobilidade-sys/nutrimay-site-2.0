@@ -14,8 +14,8 @@ export async function POST(request: Request) {
       thermalBagOption,
       customer,
       paymentMethod,
-      cardToken,
-      senderHash,
+      encryptedCard,
+      cardBrand,
       installments = 1,
       cardHolderName,
     }: {
@@ -23,20 +23,16 @@ export async function POST(request: Request) {
       thermalBagOption?: 'new' | 'exchange';
       customer?: CheckoutCustomer;
       paymentMethod: 'credit_card' | 'pix';
-      cardToken?: string;
-      senderHash: string;
+      encryptedCard?: string;
+      cardBrand?: string | null;
       installments?: number;
       cardHolderName?: string;
     } = body;
 
     validateCheckoutPayload(items, customer);
 
-    if (!senderHash) {
-      throw new Error('Hash do comprador (senderHash) é obrigatório');
-    }
-
-    if (paymentMethod === 'credit_card' && !cardToken) {
-      throw new Error('Token do cartão é obrigatório para pagamento com cartão');
+    if (paymentMethod === 'credit_card' && !encryptedCard) {
+      throw new Error('Cartão criptografado é obrigatório para pagamento com cartão');
     }
 
     const pagbankItems = items.map((item) => ({
@@ -77,21 +73,24 @@ export async function POST(request: Request) {
     };
 
     if (paymentMethod === 'credit_card') {
+      if (!encryptedCard) {
+        throw new Error('Cartão criptografado é obrigatório para pagamento com cartão');
+      }
+      
       payload.charges.push({
         type: 'CARD',
         payment_method: {
           type: 'CREDIT_CARD',
           card: {
-            token: cardToken,
+            encrypted: encryptedCard,
+            brand: cardBrand || 'UNKNOWN',
             holder: {
               name: cardHolderName || customer?.name || 'Cliente',
+              tax_id: cleanCpf(customer?.cpf || ''),
             },
           },
           installments: installments,
           capture: true,
-        },
-        sender: {
-          hash: senderHash,
         },
       });
     } else if (paymentMethod === 'pix') {
@@ -102,9 +101,6 @@ export async function POST(request: Request) {
           pix: {
             expiration_time: 3600,
           },
-        },
-        sender: {
-          hash: senderHash,
         },
       });
     }

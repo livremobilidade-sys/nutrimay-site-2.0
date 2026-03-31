@@ -11,7 +11,20 @@ import { doc, getDoc } from "firebase/firestore";
 
 declare global {
   interface Window {
-    PagSeguroDirectPayment: any;
+    PagSeguro: {
+      encryptCard: (params: {
+        publicKey: string;
+        holder: string;
+        number: string;
+        expMonth: string;
+        expYear: string;
+        securityCode: string;
+      }) => {
+        encryptedCard: string;
+        hasErrors: boolean;
+        errors: Array<{ code: string; message: string }>;
+      };
+    };
   }
 }
 
@@ -25,8 +38,6 @@ export default function CheckoutPage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sessionError, setSessionError] = useState<string | null>(null);
   const [isLoadingPayment, setIsLoadingPayment] = useState(false);
   const [installments, setInstallments] = useState<{ quantity: number; amount: number }[]>([]);
   const [selectedInstallment, setSelectedInstallment] = useState(1);
@@ -68,36 +79,22 @@ export default function CheckoutPage() {
     const loadPagBankScript = async () => {
       if (scriptLoaded.current) return;
       
-      const isProduction = process.env.NEXT_PUBLIC_PAGBANK_ENV === 'production';
-      console.log('PAGBANK_ENV:', process.env.NEXT_PUBLIC_PAGBANK_ENV, 'IsProd:', isProduction);
+      const envValue = process.env.NEXT_PUBLIC_PAGBANK_ENV || 'sandbox';
+      const isProduction = envValue === 'production';
       
       const scriptSrc = isProduction
-        ? 'https://stc.pagseguro.uol.com.br/pagseguro/api/v2/checkout/pagseguro.directpayment.js'
-        : 'https://stc.sandbox.pagseguro.uol.com.br/pagseguro/api/v2/checkout/pagseguro.directpayment.js';
+        ? 'https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js'
+        : 'https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js';
 
       const script = document.createElement('script');
       script.src = scriptSrc;
       script.async = true;
-      script.onload = async () => {
+      script.onload = () => {
         scriptLoaded.current = true;
-        console.log('Script PagBank carregado');
-        try {
-          const res = await fetch('/api/pagbank/session', { method: 'POST' });
-          const data = await res.json();
-          console.log('Session response:', data);
-          if (data.sessionId) {
-            setSessionId(data.sessionId);
-            window.PagSeguroDirectPayment.setSessionId(data.sessionId);
-            console.log('Session ID configurada');
-          } else if (data.error) {
-            console.error('Erro da API session:', data.error);
-          }
-        } catch (err) {
-          console.error('Erro ao carregar sessão PagBank:', err);
-        }
+        console.log('SDK PagBank carregado');
       };
       script.onerror = () => {
-        console.error('Falha ao carregar script PagBank');
+        console.error('Falha ao carregar SDK PagBank');
       };
       document.body.appendChild(script);
     };
@@ -264,58 +261,29 @@ export default function CheckoutPage() {
     }
   };
 
-  const getSenderHash = (): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      if (!window.PagSeguroDirectPayment) {
-        reject(new Error('PagBank não carregado'));
-        return;
-      }
-      window.PagSeguroDirectPayment.onSenderHashReady((response: any) => {
-        if (response.status === 'error') {
-          reject(new Error(response.message || 'Erro ao gerar hash'));
-          return;
-        }
-        resolve(response.senderHash);
-      });
+  const encryptCard = (cardNumber: string, cvv: string, expiry: string, holderName: string): string => {
+    if (!window.PagSeguro) {
+      throw new Error('SDK PagBank não carregado');
+    }
+    
+    const [month, year] = expiry.split('/');
+    const publicKey = process.env.NEXT_PUBLIC_PAGBANK_PUBLIC_KEY || '';
+    
+    const result = window.PagSeguro.encryptCard({
+      publicKey,
+      holder: holderName,
+      number: cardNumber.replace(/\s/g, ''),
+      expMonth: month,
+      expYear: '20' + year,
+      securityCode: cvv,
     });
-  };
-
-  const getCardToken = (cardNumber: string, cvv: string, expiry: string, brand: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      if (!window.PagSeguroDirectPayment) {
-        reject(new Error('PagBank não carregado'));
-        return;
-      }
-      const [month, year] = expiry.split('/');
-      window.PagSeguroDirectPayment.createCardToken({
-        cardNumber: cardNumber.replace(/\s/g, ''),
-        brand: brand,
-        cvv: cvv,
-        expirationMonth: month,
-        expirationYear: '20' + year,
-        success: (response: any) => {
-          resolve(response.card.token);
-        },
-        error: (response: any) => {
-          reject(new Error(response.errors?.[0] || 'Erro ao tokenizar cartão'));
-        },
-      });
-    });
-  };
-
-  const loadInstallments = (brand: string) => {
-    if (!window.PagSeguroDirectPayment || !brand) return;
-    window.PagSeguroDirectPayment.getInstallments({
-      amount: finalTotal,
-      brand: brand,
-      success: (response: any) => {
-        const brandInstallments = response.installments[brand] || [];
-        setInstallments(brandInstallments.slice(0, 6));
-      },
-      error: () => {
-        setInstallments([]);
-      },
-    });
+    
+    if (result.hasErrors) {
+      const errorMessages = result.errors.map(e => e.message).join(', ');
+      throw new Error(errorMessages || 'Erro ao criptografar cartão');
+    }
+    
+    return result.encryptedCard;
   };
 
   const handleCardNumberChange = (value: string) => {
@@ -324,11 +292,6 @@ export default function CheckoutPage() {
     if (newBrand !== cardBrand) {
       setCardBrand(newBrand);
       setLogoError(false);
-      if (newBrand) {
-        loadInstallments(newBrand);
-      } else {
-        setInstallments([]);
-      }
     }
     setFormData(prev => ({ ...prev, cardNumber: maskedValue }));
     
@@ -369,11 +332,6 @@ export default function CheckoutPage() {
         throw new Error("Por favor, corrija os erros no formulário.");
       }
 
-      if (!sessionId) {
-        setSessionError("Sessão de pagamento não iniciada. Recarregue a página.");
-        throw new Error("Sessão de pagamento não iniciada. Recarregue a página.");
-      }
-
       setIsProcessing(true);
       setIsLoadingPayment(true);
 
@@ -384,21 +342,31 @@ export default function CheckoutPage() {
         phone: formData.phone
       });
 
-      let finalSenderHash = '';
-      let finalCardToken: string | undefined;
+      let encryptedCard: string | undefined;
+      let cardBrandFinal = cardBrand;
 
-      if (paymentMethod === 'pix') {
-        finalSenderHash = await getSenderHash();
-      } else if (paymentMethod === 'credit_card') {
-        finalSenderHash = await getSenderHash();
-        finalCardToken = await getCardToken(
-          formData.cardNumber,
-          formData.cardCVV,
-          formData.cardExpiry,
-          cardBrand || 'visa'
-        );
-      } else {
-        throw new Error('Método de pagamento não suportado');
+      if (paymentMethod === 'credit_card') {
+        const brand = getCardBrand(formData.cardNumber);
+        cardBrandFinal = brand;
+        
+        const [month, year] = formData.cardExpiry.split('/');
+        const publicKey = process.env.NEXT_PUBLIC_PAGBANK_PUBLIC_KEY || '';
+        
+        const result = window.PagSeguro.encryptCard({
+          publicKey,
+          holder: cardHolderName,
+          number: formData.cardNumber.replace(/\s/g, ''),
+          expMonth: month,
+          expYear: '20' + year,
+          securityCode: formData.cardCVV,
+        });
+        
+        if (result.hasErrors) {
+          const errorMessages = result.errors.map(e => e.message).join(', ');
+          throw new Error(errorMessages || 'Erro ao criptografar cartão');
+        }
+        
+        encryptedCard = result.encryptedCard;
       }
 
       const res = await fetch('/api/pagbank/charge', {
@@ -410,8 +378,8 @@ export default function CheckoutPage() {
           pickupPoint,
           thermalBagOption,
           paymentMethod,
-          senderHash: finalSenderHash,
-          cardToken: finalCardToken,
+          encryptedCard,
+          cardBrand: cardBrandFinal,
           installments: selectedInstallment,
           cardHolderName,
         })

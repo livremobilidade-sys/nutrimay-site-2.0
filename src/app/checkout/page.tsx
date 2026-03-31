@@ -74,7 +74,7 @@ export default function CheckoutPage() {
   const [cardHolderName, setCardHolderName] = useState("");
 
   useEffect(() => {
-    console.log('COLHER - Checkout page mounted');
+    console.log('ALHO - Checkout page mounted');
     setMounted(true);
 
     const loadPagBankScript = async () => {
@@ -356,14 +356,14 @@ export default function CheckoutPage() {
         const pkData = await pkRes.json();
         const publicKey = pkData.publicKey;
         
-        console.log('COLHER - Public key exists:', !!publicKey);
-        console.log('COLHER - Public key length:', publicKey?.length);
+        console.log('ALHO - Public key exists:', !!publicKey);
+        console.log('ALHO - Public key length:', publicKey?.length);
         
         if (!publicKey) {
           throw new Error('Chave pública não configurada. Contate o administrador.');
         }
         
-        console.log('COLHER - Encrypting card with publicKey...');
+        console.log('ALHO - Encrypting card with publicKey...');
         
         const result = window.PagSeguro.encryptCard({
           publicKey,

@@ -77,16 +77,25 @@ export async function POST(request: Request) {
         throw new Error('Cartão criptografado é obrigatório para pagamento com cartão');
       }
       
+      let customerCpf: string | undefined;
+      if (customer?.cpf) {
+        try {
+          customerCpf = cleanCpf(customer.cpf);
+        } catch (e) {
+          console.warn('CPF inválido, enviando sem CPF');
+        }
+      }
+      
       payload.charges.push({
         type: 'CARD',
         payment_method: {
           type: 'CREDIT_CARD',
           card: {
             encrypted: encryptedCard,
-            brand: cardBrand || 'UNKNOWN',
+            brand: cardBrand?.toUpperCase() || 'UNKNOWN',
             holder: {
-              name: cardHolderName || customer?.name || 'Cliente',
-              tax_id: cleanCpf(customer?.cpf || ''),
+              name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
+              ...(customerCpf && { tax_id: customerCpf }),
             },
           },
           installments: installments,
@@ -107,6 +116,10 @@ export async function POST(request: Request) {
 
     console.log('--- PAYLOAD ENVIADO AO PAGBANK (CHARGE) ---');
     console.log(JSON.stringify(payload, null, 2));
+    console.log('Encrypted card (first 50 chars):', encryptedCard?.substring(0, 50));
+    console.log('Card brand:', cardBrand);
+    console.log('Cardholder:', cardHolderName);
+    console.log('Customer CPF:', customer?.cpf);
 
     const response = await fetch(PAGBANK_URL, {
       method: 'POST',

@@ -352,8 +352,8 @@ export default function CheckoutPage() {
         const [month, year] = formData.cardExpiry.split('/');
         const publicKey = process.env.NEXT_PUBLIC_PAGBANK_PUBLIC_KEY;
         
-        console.log('Public key exists:', !!publicKey);
-        console.log('Public key length:', publicKey?.length);
+        console.log('BATATA DOCE - Public key exists:', !!publicKey);
+        console.log('BATATA DOCE - Public key length:', publicKey?.length);
         
         if (!publicKey) {
           throw new Error('Chave pública não configurada. Contate o administrador.');

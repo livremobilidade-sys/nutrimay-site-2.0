@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       customer: {
         name: 'Teste Cliente',
         email: 'teste@email.com',
-        tax_id: '11111111111',
+        tax_id: '33813392813',
       },
       items: [
         {
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
           },
           holder: {
             name: 'TESTE CLIENTE',
-            tax_id: '11111111111',
+            tax_id: '33813392813',
           },
         },
       };

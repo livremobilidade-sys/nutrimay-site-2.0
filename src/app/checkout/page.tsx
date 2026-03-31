@@ -74,7 +74,7 @@ export default function CheckoutPage() {
   const [cardHolderName, setCardHolderName] = useState("");
 
   useEffect(() => {
-    console.log('MELancia - Nova versao com CPF 11111111111');
+    console.log('MORANGO - CPF correto: 33813392813');
     setMounted(true);
 
     const loadPagBankScript = async () => {
@@ -356,14 +356,14 @@ export default function CheckoutPage() {
         const pkData = await pkRes.json();
         const publicKey = pkData.publicKey;
         
-        console.log('MELANCIA - Public key exists:', !!publicKey);
-        console.log('MELANCIA - Public key length:', publicKey?.length);
+        console.log('MORANGO - Public key exists:', !!publicKey);
+        console.log('MORANGO - Public key length:', publicKey?.length);
         
         if (!publicKey) {
           throw new Error('Chave pública não configurada. Contate o administrador.');
         }
         
-        console.log('MELANCIA - Encrypting card with publicKey...');
+        console.log('MORANGO - Encrypting card with publicKey...');
         
         const result = window.PagSeguro.encryptCard({
           publicKey,

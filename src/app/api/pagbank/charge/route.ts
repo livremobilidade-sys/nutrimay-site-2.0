@@ -170,16 +170,16 @@ export async function POST(request: Request) {
       };
     }
 
-    if (customer?.email) {
+    if (customer?.email || userId) {
       try {
         await addDoc(collection(db, 'orders'), {
           referenceId: referenceId,
           orderId: orderId,
           pagbankOrderId: orderId,
           userId: userId || null,
-          userEmail: customer.email,
-          userName: customer.name,
-          userCpf: customer.cpf,
+          userEmail: customer?.email || null,
+          userName: customer?.name || null,
+          userCpf: customer?.cpf || null,
           status: paymentData.status,
           paymentMethod,
           total: totalAmount / 100,

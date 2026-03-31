@@ -71,11 +71,33 @@ export default function PedidosPage() {
       setUser(currentUser);
       
       try {
-        const q = query(
-          collection(db, 'orders'),
-          where('userId', '==', currentUser.uid),
-          orderBy('createdAt', 'desc')
-        );
+        let q;
+        
+        // Try to get orders by userId first
+        try {
+          q = query(
+            collection(db, 'orders'),
+            where('userId', '==', currentUser.uid),
+            orderBy('createdAt', 'desc')
+          );
+          const snapshot = await getDocs(q);
+          
+          // If no orders with userId, try to get by email
+          if (snapshot.empty && currentUser.email) {
+            q = query(
+              collection(db, 'orders'),
+              where('userEmail', '==', currentUser.email),
+              orderBy('createdAt', 'desc')
+            );
+          }
+        } catch (e) {
+          // If query fails (index not ready), fall back to email query
+          q = query(
+            collection(db, 'orders'),
+            where('userEmail', '==', currentUser.email),
+            orderBy('createdAt', 'desc')
+          );
+        }
         
         const snapshot = await getDocs(q);
         const ordersData: Order[] = [];

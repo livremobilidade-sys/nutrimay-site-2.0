@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BatchStatusBar } from "./shop/BatchStatusBar";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, User, ShieldCheck, ChevronDown, LogIn, Share2 } from "lucide-react";
+import { LogOut, User, ShieldCheck, ChevronDown, LogIn, Share2, Package } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -111,18 +111,27 @@ export function Header() {
                             <span className="text-xs font-bold uppercase tracking-widest">Meu Cadastro</span>
                          </Link>
 
-                         <button 
-                           onClick={() => {
-                             setShowMenu(false);
-                             router.push("/cadastro/completar#convite");
-                           }}
-                           className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl hover:bg-[#22C55E]/10 text-white/60 hover:text-[#22C55E] transition-all group text-left"
-                         >
-                            <Share2 className="w-4 h-4" />
-                            <span className="text-xs font-bold uppercase tracking-widest">Convidar Amigos</span>
-                         </button>
+                          <button 
+                            onClick={() => {
+                              setShowMenu(false);
+                              router.push("/cadastro/completar#convite");
+                            }}
+                            className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl hover:bg-[#22C55E]/10 text-white/60 hover:text-[#22C55E] transition-all group text-left"
+                          >
+                             <Share2 className="w-4 h-4" />
+                             <span className="text-xs font-bold uppercase tracking-widest">Convidar Amigos</span>
+                          </button>
 
-                         {['evari.may@gmail.com', 'evaristosilvalima@gmail.com'].includes(user.email) && ( // Lista VIP de Admins Autorizados
+                          <Link 
+                            href="/pedidos" 
+                            onClick={() => setShowMenu(false)}
+                            className="flex items-center gap-4 px-4 py-3 rounded-2xl hover:bg-white/5 text-white/60 hover:text-white transition-all group"
+                          >
+                             <Package className="w-4 h-4" />
+                             <span className="text-xs font-bold uppercase tracking-widest">Meus Pedidos</span>
+                          </Link>
+
+                          {['evari.may@gmail.com', 'evaristosilvalima@gmail.com'].includes(user.email) && ( // Lista VIP de Admins Autorizados
                             <Link 
                               href="/admin" 
                               onClick={() => setShowMenu(false)}

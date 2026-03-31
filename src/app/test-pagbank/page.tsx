@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function TestPagBank() {
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<string>("Aguardando...");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setResult("Página carregada. Clique em um botão para testar.");
+  }, []);
 
   const runTest = async (testType: string) => {
     setLoading(true);
+    setResult("Executando teste " + testType + "...");
     try {
       const res = await fetch("/api/pagbank/diagnostico", {
         method: "POST",
@@ -15,24 +20,34 @@ export default function TestPagBank() {
         body: JSON.stringify({ testType }),
       });
       const data = await res.json();
-      setResult(data);
+      setResult(JSON.stringify(data, null, 2));
     } catch (err: any) {
-      setResult({ error: err.message });
+      setResult("Erro: " + err.message);
     }
     setLoading(false);
   };
 
   return (
-    <div style={{ padding: "20px", fontFamily: "monospace" }}>
-      <h1>Teste PagBank</h1>
-      <button onClick={() => runTest("PIX")} disabled={loading} style={{ margin: "5px", padding: "10px" }}>
-        Testar PIX
-      </button>
-      <button onClick={() => runTest("CREDIT_CARD")} disabled={loading} style={{ margin: "5px", padding: "10px" }}>
-        Testar Cartão
-      </button>
-      <pre style={{ background: "#f0f0f0", padding: "10px", marginTop: "20px" }}>
-        {result ? JSON.stringify(result, null, 2) : "Aguardando teste..."}
+    <div style={{ padding: "40px", maxWidth: "800px", margin: "0 auto" }}>
+      <h1 style={{ color: "#22C55E" }}>Teste PagBank</h1>
+      <div style={{ marginTop: "20px" }}>
+        <button 
+          onClick={() => runTest("PIX")} 
+          disabled={loading}
+          style={{ margin: "10px", padding: "15px 30px", fontSize: "16px", cursor: "pointer" }}
+        >
+          Testar PIX
+        </button>
+        <button 
+          onClick={() => runTest("CREDIT_CARD")} 
+          disabled={loading}
+          style={{ margin: "10px", padding: "15px 30px", fontSize: "16px", cursor: "pointer" }}
+        >
+          Testar Cartão
+        </button>
+      </div>
+      <pre style={{ background: "#1a1a1c", color: "#fff", padding: "20px", marginTop: "30px", borderRadius: "10px", overflow: "auto" }}>
+        {result}
       </pre>
     </div>
   );

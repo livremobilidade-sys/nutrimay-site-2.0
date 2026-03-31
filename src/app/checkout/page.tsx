@@ -26,6 +26,7 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const [isLoadingPayment, setIsLoadingPayment] = useState(false);
   const [installments, setInstallments] = useState<{ quantity: number; amount: number }[]>([]);
   const [selectedInstallment, setSelectedInstallment] = useState(1);
@@ -68,6 +69,8 @@ export default function CheckoutPage() {
       if (scriptLoaded.current) return;
       
       const isProduction = process.env.NEXT_PUBLIC_PAGBANK_ENV === 'production';
+      console.log('PAGBANK_ENV:', process.env.NEXT_PUBLIC_PAGBANK_ENV, 'IsProd:', isProduction);
+      
       const scriptSrc = isProduction
         ? 'https://stc.pagseguro.uol.com.br/pagseguro/api/v2/checkout/pagseguro.directpayment.js'
         : 'https://stc.sandbox.pagseguro.uol.com.br/pagseguro/api/v2/checkout/pagseguro.directpayment.js';
@@ -77,16 +80,24 @@ export default function CheckoutPage() {
       script.async = true;
       script.onload = async () => {
         scriptLoaded.current = true;
+        console.log('Script PagBank carregado');
         try {
           const res = await fetch('/api/pagbank/session', { method: 'POST' });
           const data = await res.json();
+          console.log('Session response:', data);
           if (data.sessionId) {
             setSessionId(data.sessionId);
             window.PagSeguroDirectPayment.setSessionId(data.sessionId);
+            console.log('Session ID configurada');
+          } else if (data.error) {
+            console.error('Erro da API session:', data.error);
           }
         } catch (err) {
           console.error('Erro ao carregar sessão PagBank:', err);
         }
+      };
+      script.onerror = () => {
+        console.error('Falha ao carregar script PagBank');
       };
       document.body.appendChild(script);
     };
@@ -359,6 +370,7 @@ export default function CheckoutPage() {
       }
 
       if (!sessionId) {
+        setSessionError("Sessão de pagamento não iniciada. Recarregue a página.");
         throw new Error("Sessão de pagamento não iniciada. Recarregue a página.");
       }
 

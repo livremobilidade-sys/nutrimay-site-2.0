@@ -59,6 +59,7 @@ export async function POST(request: Request) {
       customer: {
         name: customer?.name ?? 'Cliente MayNutri',
         email: customer?.email || 'cliente@email.com',
+        tax_id: customer?.cpf ? customer.cpf.replace(/\D/g, '') : '12345678901',
       },
       items: pagbankItems,
       notification_urls: [`${baseUrl}/api/pagbank/webhook`],
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
           },
           holder: {
             name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
+            tax_id: customer?.cpf ? customer.cpf.replace(/\D/g, '') : '12345678901',
           },
         },
       };

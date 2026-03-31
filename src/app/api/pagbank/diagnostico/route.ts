@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       customer: {
         name: 'Teste Cliente',
         email: 'teste@email.com',
+        tax_id: '12345678901',
       },
       items: [
         {

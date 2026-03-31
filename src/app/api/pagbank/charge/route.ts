@@ -65,14 +65,15 @@ export async function POST(request: Request) {
       notification_urls: [`${baseUrl}/api/pagbank/webhook`],
     };
 
+    const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);
+    
     if (paymentMethod === 'credit_card') {
       if (!encryptedCard) {
         throw new Error('Cartão criptografado é obrigatório para pagamento com cartão');
       }
       
-      const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);
-      
-      (payload as any).charge = {
+      (payload as any).charges = [{
+        reference_id: `CHARGE-${Date.now()}`,
         amount: {
           value: totalAmount,
           currency: 'BRL',
@@ -89,11 +90,10 @@ export async function POST(request: Request) {
             tax_id: customer?.cpf ? customer.cpf.replace(/\D/g, '') : '33813392813',
           },
         },
-      };
+      }];
     } else if (paymentMethod === 'pix') {
-      const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);
-      
-      (payload as any).charge = {
+      (payload as any).charges = [{
+        reference_id: `CHARGE-${Date.now()}`,
         amount: {
           value: totalAmount,
           currency: 'BRL',
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
             expiration_time: 3600,
           },
         },
-      };
+      }];
     }
 
     console.log('--- PAYLOAD ENVIADO AO PAGBANK ---');
@@ -123,8 +123,6 @@ export async function POST(request: Request) {
     const text = await response.text();
     console.log('--- RESPOSTA BRUTA DO PAGBANK ---');
     console.log(text);
-    console.log('--- PAYLOAD COMPLETO ---');
-    console.log(JSON.stringify(payload));
 
     let data;
     try {
@@ -146,91 +144,29 @@ export async function POST(request: Request) {
     const orderId = data.id;
     console.log('Order created:', orderId);
     
+    const charge = data.charges?.[0];
     let paymentData: any = {
       reference_id: referenceId,
       orderId: orderId,
+      status: charge?.status || 'PROCESSING',
     };
 
     if (paymentMethod === 'pix') {
-      const payRes = await fetch(`${PAGBANK_URL}/${orderId}/pay`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${PAGBANK_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          charges: [{
-            payment_method: {
-              type: 'PIX',
-              pix: {
-                expiration_time: 3600,
-              },
-            },
-          }],
-        }),
-      });
-      
-      const payText = await payRes.text();
-      console.log('PIX pay response:', payText);
-      let payData;
-      try { payData = JSON.parse(payText); } catch { payData = payText; }
-      
-      if (!payRes.ok) {
-        throw new Error('Erro ao processar PIX: ' + (payData.error_messages?.[0]?.description || payData.message));
-      }
-      
       paymentData = {
         ...paymentData,
         pix: {
-          qrcode: payData.charge?.payment_method?.pix?.qr_code?.image?.plain,
-          text: payData.charge?.payment_method?.pix?.qr_code?.text,
+          qrcode: charge?.payment_method?.pix?.qr_code?.image?.plain,
+          text: charge?.payment_method?.pix?.qr_code?.text,
         },
-        status: payData.charge?.status || 'WAITING_PAYMENT',
+        status: charge?.status || 'WAITING_PAYMENT',
       };
     } else if (paymentMethod === 'credit_card') {
-      const payRes = await fetch(`${PAGBANK_URL}/${orderId}/pay`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${PAGBANK_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          charges: [{
-            payment_method: {
-              type: 'CREDIT_CARD',
-              installments: installments,
-              capture: true,
-              card: {
-                encrypted: encryptedCard,
-              },
-              holder: {
-                name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
-                tax_id: customer?.cpf ? customer.cpf.replace(/\D/g, '') : '33813392813',
-              },
-            },
-          }],
-        }),
-      });
-      
-      const payText = await payRes.text();
-      console.log('Credit card pay response:', payText);
-      let payData;
-      try { payData = JSON.parse(payText); } catch { payData = payText; }
-      
-      if (!payRes.ok) {
-        throw new Error('Erro ao processar cartão: ' + (payData.error_messages?.[0]?.description || payData.message));
-      }
-      
       paymentData = {
         ...paymentData,
-        status: payData.charge?.status || 'PROCESSING',
-        cardBrand: payData.charge?.payment_method?.card?.brand,
+        status: charge?.status || 'PROCESSING',
+        cardBrand: charge?.payment_method?.card?.brand,
       };
     }
-
-    return NextResponse.json(paymentData);
 
     return NextResponse.json(paymentData);
 

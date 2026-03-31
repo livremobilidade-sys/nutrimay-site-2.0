@@ -32,7 +32,8 @@ export async function POST(request: Request) {
     };
 
     if (testType === 'PIX') {
-      testPayload.charge = {
+      testPayload.charges = [{
+        reference_id: `CHARGE-${Date.now()}`,
         amount: {
           value: 1000,
           currency: 'BRL',
@@ -43,9 +44,10 @@ export async function POST(request: Request) {
             expiration_time: 3600,
           },
         },
-      };
+      }];
     } else if (testType === 'CREDIT_CARD') {
-      testPayload.charge = {
+      testPayload.charges = [{
+        reference_id: `CHARGE-${Date.now()}`,
         amount: {
           value: 1000,
           currency: 'BRL',
@@ -62,7 +64,7 @@ export async function POST(request: Request) {
             tax_id: '33813392813',
           },
         },
-      };
+      }];
     }
 
     console.log('Test payload:', JSON.stringify(testPayload, null, 2));

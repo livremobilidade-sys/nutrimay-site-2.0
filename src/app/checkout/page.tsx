@@ -74,7 +74,7 @@ export default function CheckoutPage() {
   const [cardHolderName, setCardHolderName] = useState("");
 
   useEffect(() => {
-    console.log('UVA - Checkout page mounted');
+    console.log('CADA - Checkout page mounted');
     setMounted(true);
 
     const loadPagBankScript = async () => {
@@ -356,14 +356,14 @@ export default function CheckoutPage() {
         const pkData = await pkRes.json();
         const publicKey = pkData.publicKey;
         
-        console.log('UVA - Public key exists:', !!publicKey);
-        console.log('UVA - Public key length:', publicKey?.length);
+        console.log('CADA - Public key exists:', !!publicKey);
+        console.log('CADA - Public key length:', publicKey?.length);
         
         if (!publicKey) {
           throw new Error('Chave pública não configurada. Contate o administrador.');
         }
         
-        console.log('UVA - Encrypting card with publicKey...');
+        console.log('CADA - Encrypting card with publicKey...');
         
         const result = window.PagSeguro.encryptCard({
           publicKey,

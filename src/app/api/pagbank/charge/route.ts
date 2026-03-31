@@ -62,7 +62,6 @@ export async function POST(request: Request) {
       },
       items: pagbankItems,
       notification_urls: [`${baseUrl}/api/pagbank/webhook`],
-      charges: [],
     };
 
     if (paymentMethod === 'credit_card') {
@@ -72,8 +71,7 @@ export async function POST(request: Request) {
       
       const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);
       
-      payload.charges.push({
-        reference_id: `CHARGE-${Date.now()}`,
+      (payload as any).charge = {
         amount: {
           value: totalAmount,
           currency: 'BRL',
@@ -84,18 +82,16 @@ export async function POST(request: Request) {
           capture: true,
           card: {
             encrypted: encryptedCard,
-            store: false,
           },
           holder: {
             name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
           },
         },
-      });
+      };
     } else if (paymentMethod === 'pix') {
       const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);
       
-      payload.charges.push({
-        reference_id: `CHARGE-${Date.now()}`,
+      (payload as any).charge = {
         amount: {
           value: totalAmount,
           currency: 'BRL',
@@ -106,13 +102,11 @@ export async function POST(request: Request) {
             expiration_time: 3600,
           },
         },
-      });
+      };
     }
 
-    console.log('--- PAYLOAD ENVIADO AO PAGBANK (CHARGE) ---');
+    console.log('--- PAYLOAD ENVIADO AO PAGBANK ---');
     console.log(JSON.stringify(payload, null, 2));
-    console.log('Encrypted card (first 50 chars):', encryptedCard?.substring(0, 50));
-    console.log('Installments:', installments);
 
     const response = await fetch(PAGBANK_URL, {
       method: 'POST',
@@ -147,7 +141,7 @@ export async function POST(request: Request) {
       throw new Error(message);
     }
 
-    const charge = data.charges?.[0];
+    const charge = data.charge;
     let paymentData: any = {
       reference_id: referenceId,
       orderId: data.id,

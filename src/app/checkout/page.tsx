@@ -72,6 +72,9 @@ export default function CheckoutPage() {
   const [logoError, setLogoError] = useState(false);
   const [editPersonal, setEditPersonal] = useState(true);
   const [cardHolderName, setCardHolderName] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [modalType, setModalType] = useState<'loading' | 'success' | 'error'>('loading');
+  const [modalMessage, setModalMessage] = useState('');
 
   useEffect(() => {
     console.log('PUDIM - Nova versao com charges array');
@@ -333,6 +336,9 @@ export default function CheckoutPage() {
         throw new Error("Por favor, corrija os erros no formulário.");
       }
 
+      setModalType('loading');
+      setModalMessage('Processando pagamento...');
+      setShowModal(true);
       setIsProcessing(true);
       setIsLoadingPayment(true);
 
@@ -400,30 +406,50 @@ export default function CheckoutPage() {
 
       const data = await res.json();
 
-      if (data.error) throw new Error(data.error);
+      if (data.error) {
+        setModalType('error');
+        setModalMessage(data.error);
+        setTimeout(() => {
+          setShowModal(false);
+          setIsProcessing(false);
+          setIsLoadingPayment(false);
+        }, 3000);
+        return;
+      }
 
       if (paymentMethod === 'pix' && data.pix) {
         setPixData({
           qrcode: data.pix.qrcode,
           text: data.pix.text,
         });
+        setShowModal(false);
       } else if (paymentMethod === 'credit_card') {
         if (data.status === 'PAID' || data.status === 'AUTHORIZED') {
-          setSuccessData({
-            orderId: data.orderId,
-            message: 'Pagamento aprovado! Obrigado pela compra.',
-          });
+          setModalType('success');
+          setModalMessage('Pagamento aprovado! Obrigado pela compra.');
           setTimeout(() => {
             clearCart();
             router.push('/pedido/sucesso');
           }, 2000);
         } else {
-          throw new Error(`Pagamento em análise. Status: ${data.status}`);
+          setModalType('error');
+          setModalMessage(`Pagamento em análise. Status: ${data.status}`);
+          setTimeout(() => {
+            setShowModal(false);
+            setIsProcessing(false);
+            setIsLoadingPayment(false);
+          }, 3000);
         }
       }
 
     } catch (err: any) {
-      setApiError(err.message);
+      setModalType('error');
+      setModalMessage(err.message);
+      setTimeout(() => {
+        setShowModal(false);
+        setIsProcessing(false);
+        setIsLoadingPayment(false);
+      }, 3000);
     } finally {
       setIsProcessing(false);
       setIsLoadingPayment(false);
@@ -499,6 +525,37 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-[#1a1a1c] text-white font-sans selection:bg-[#22C55E] selection:text-black">
+      {/* MODAL DE PROCESSAMENTO */}
+      {showModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+          <div className="relative bg-[#1a1a1c] border border-white/10 rounded-3xl p-8 w-full max-w-md text-center shadow-2xl animate-in zoom-in duration-300">
+            {modalType === 'loading' && (
+              <>
+                <Loader2 className="w-16 h-16 text-[#22C55E] mx-auto mb-6 animate-spin" />
+                <h3 className="text-xl font-bold text-white mb-2">Processando Pagamento</h3>
+                <p className="text-neutral-400 text-sm">{modalMessage}</p>
+              </>
+            )}
+            {modalType === 'success' && (
+              <>
+                <CheckCircle2 className="w-16 h-16 text-[#22C55E] mx-auto mb-6" />
+                <h3 className="text-xl font-bold text-white mb-2">Sucesso!</h3>
+                <p className="text-neutral-400 text-sm">{modalMessage}</p>
+              </>
+            )}
+            {modalType === 'error' && (
+              <>
+                <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+                <h3 className="text-xl font-bold text-white mb-2">Erro no Pagamento</h3>
+                <p className="text-red-400 text-sm">{modalMessage}</p>
+                <p className="text-neutral-500 text-xs mt-4">Tente novamente ou utilize outro método de pagamento.</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <header className="border-b border-white/5 bg-black/40 backdrop-blur-xl sticky top-0 z-50 py-6">
         <div className="container mx-auto px-6 max-w-6xl flex justify-between items-center">
@@ -874,17 +931,17 @@ export default function CheckoutPage() {
                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 text-white/30">
                           <LockIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                        </div>
-                       <div className="flex flex-col">
-                          <span className="text-[9px] sm:text-[10px] font-black text-white uppercase">PCI DSS</span>
-                          <span className="text-[8px] font-medium text-white/20 uppercase">Compliance</span>
-                       </div>
-                    </div>
-                 </div>
-               </div>
-            </div>
-          </div>
-        </div>
-      </main>
+                        <div className="flex flex-col">
+                           <span className="text-[9px] sm:text-[10px] font-black text-white uppercase">PCI DSS</span>
+                           <span className="text-[8px] font-medium text-white/20 uppercase">Compliance</span>
+                        </div>
+                     </div>
+                  </div>
+                </div>
+             </div>
+           </div>
+         </div>
+       </main>
     </div>
   );
 }

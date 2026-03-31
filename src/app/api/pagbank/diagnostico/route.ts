@@ -40,9 +40,6 @@ export async function POST(request: Request) {
         },
         payment_method: {
           type: 'PIX',
-          pix: {
-            expiration_time: 3600,
-          },
         },
       }];
     } else if (testType === 'CREDIT_CARD') {

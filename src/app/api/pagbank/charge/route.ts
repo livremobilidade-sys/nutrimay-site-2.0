@@ -92,10 +92,6 @@ export async function POST(request: Request) {
         },
       }];
     } else if (paymentMethod === 'pix') {
-      const now = new Date();
-      now.setHours(now.getHours() + 1);
-      const expirationDate = now.toISOString();
-      
       (payload as any).charges = [{
         reference_id: `CHARGE-${Date.now()}`,
         amount: {
@@ -104,9 +100,6 @@ export async function POST(request: Request) {
         },
         payment_method: {
           type: 'PIX',
-          pix: {
-            expiration_date: expirationDate,
-          },
         },
       }];
     }

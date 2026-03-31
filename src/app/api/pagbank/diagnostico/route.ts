@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       customer: {
         name: 'Teste Cliente',
         email: 'teste@email.com',
-        tax_id: '12345678901',
+        tax_id: '71435868404',
       },
       items: [
         {
@@ -41,6 +41,25 @@ export async function POST(request: Request) {
           type: 'PIX',
           pix: {
             expiration_time: 3600,
+          },
+        },
+      };
+    } else if (testType === 'CREDIT_CARD') {
+      testPayload.charge = {
+        amount: {
+          value: 1000,
+          currency: 'BRL',
+        },
+        payment_method: {
+          type: 'CREDIT_CARD',
+          installments: 1,
+          capture: true,
+          card: {
+            encrypted: 'test_encrypted_card',
+          },
+          holder: {
+            name: 'TESTE CLIENTE',
+            tax_id: '71435868404',
           },
         },
       };

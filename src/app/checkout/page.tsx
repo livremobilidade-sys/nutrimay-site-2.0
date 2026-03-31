@@ -1,13 +1,19 @@
 "use client";
 
 import { useCartStore } from "@/store/useCartStore";
-import { useState, useEffect } from "react";
-import { ChevronLeft, CreditCard, QrCode, ClipboardCheck, CheckCircle2, AlertCircle, ShieldCheck, Lock as LockIcon, ArrowRight, Check, Edit2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { ChevronLeft, CreditCard, QrCode, ClipboardCheck, CheckCircle2, AlertCircle, ShieldCheck, Lock as LockIcon, ArrowRight, Check, Edit2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
+
+declare global {
+  interface Window {
+    PagSeguroDirectPayment: any;
+  }
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -18,6 +24,12 @@ export default function CheckoutPage() {
   const [successData, setSuccessData] = useState<{ orderId: string, message: string } | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isLoadingPayment, setIsLoadingPayment] = useState(false);
+  const [installments, setInstallments] = useState<{ quantity: number; amount: number }[]>([]);
+  const [selectedInstallment, setSelectedInstallment] = useState(1);
+  const scriptLoaded = useRef(false);
 
   const {
     items,
@@ -47,9 +59,40 @@ export default function CheckoutPage() {
   const [cardBrand, setCardBrand] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
   const [editPersonal, setEditPersonal] = useState(true);
+  const [cardHolderName, setCardHolderName] = useState("");
 
   useEffect(() => {
     setMounted(true);
+
+    const loadPagBankScript = async () => {
+      if (scriptLoaded.current) return;
+      
+      const isProduction = process.env.NEXT_PUBLIC_PAGBANK_ENV === 'production';
+      const scriptSrc = isProduction
+        ? 'https://stc.pagseguro.uol.com.br/pagseguro/api/v2/checkout/pagseguro.directpayment.js'
+        : 'https://stc.sandbox.pagseguro.uol.com.br/pagseguro/api/v2/checkout/pagseguro.directpayment.js';
+
+      const script = document.createElement('script');
+      script.src = scriptSrc;
+      script.async = true;
+      script.onload = async () => {
+        scriptLoaded.current = true;
+        try {
+          const res = await fetch('/api/pagbank/session', { method: 'POST' });
+          const data = await res.json();
+          if (data.sessionId) {
+            setSessionId(data.sessionId);
+            window.PagSeguroDirectPayment.setSessionId(data.sessionId);
+          }
+        } catch (err) {
+          console.error('Erro ao carregar sessão PagBank:', err);
+        }
+      };
+      document.body.appendChild(script);
+    };
+
+    loadPagBankScript();
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
@@ -174,12 +217,7 @@ export default function CheckoutPage() {
     }
     
     if (name === "cardNumber") {
-      maskedValue = maskCardNumber(value);
-      const newBrand = getCardBrand(maskedValue);
-      if (newBrand !== cardBrand) {
-        setCardBrand(newBrand);
-        setLogoError(false);
-      }
+      handleCardNumberChange(value);
     }
     if (name === "cardExpiry") maskedValue = maskExpiry(value);
     if (name === "cardCVV") {
@@ -215,6 +253,83 @@ export default function CheckoutPage() {
     }
   };
 
+  const getSenderHash = (): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      if (!window.PagSeguroDirectPayment) {
+        reject(new Error('PagBank não carregado'));
+        return;
+      }
+      window.PagSeguroDirectPayment.onSenderHashReady((response: any) => {
+        if (response.status === 'error') {
+          reject(new Error(response.message || 'Erro ao gerar hash'));
+          return;
+        }
+        resolve(response.senderHash);
+      });
+    });
+  };
+
+  const getCardToken = (cardNumber: string, cvv: string, expiry: string, brand: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      if (!window.PagSeguroDirectPayment) {
+        reject(new Error('PagBank não carregado'));
+        return;
+      }
+      const [month, year] = expiry.split('/');
+      window.PagSeguroDirectPayment.createCardToken({
+        cardNumber: cardNumber.replace(/\s/g, ''),
+        brand: brand,
+        cvv: cvv,
+        expirationMonth: month,
+        expirationYear: '20' + year,
+        success: (response: any) => {
+          resolve(response.card.token);
+        },
+        error: (response: any) => {
+          reject(new Error(response.errors?.[0] || 'Erro ao tokenizar cartão'));
+        },
+      });
+    });
+  };
+
+  const loadInstallments = (brand: string) => {
+    if (!window.PagSeguroDirectPayment || !brand) return;
+    window.PagSeguroDirectPayment.getInstallments({
+      amount: finalTotal,
+      brand: brand,
+      success: (response: any) => {
+        const brandInstallments = response.installments[brand] || [];
+        setInstallments(brandInstallments.slice(0, 6));
+      },
+      error: () => {
+        setInstallments([]);
+      },
+    });
+  };
+
+  const handleCardNumberChange = (value: string) => {
+    const maskedValue = maskCardNumber(value);
+    const newBrand = getCardBrand(maskedValue);
+    if (newBrand !== cardBrand) {
+      setCardBrand(newBrand);
+      setLogoError(false);
+      if (newBrand) {
+        loadInstallments(newBrand);
+      } else {
+        setInstallments([]);
+      }
+    }
+    setFormData(prev => ({ ...prev, cardNumber: maskedValue }));
+    
+    if (errors.cardNumber) {
+      setErrors(prev => {
+        const newErrs = { ...prev };
+        delete newErrs.cardNumber;
+        return newErrs;
+      });
+    }
+  };
+
   const handleFinish = async () => {
     try {
       setApiError(null);
@@ -224,13 +339,31 @@ export default function CheckoutPage() {
       if (!validateEmail(formData.email)) newErrors.email = "E-mail inválido";
       if (!validateCPF(formData.cpf)) newErrors.cpf = "CPF inválido";
       if (formData.phone.replace(/\D/g, "").length < 10) newErrors.phone = "Telefone incompleto";
+
+      if (paymentMethod === 'credit_card') {
+        if (!formData.cardNumber || formData.cardNumber.replace(/\s/g, '').length < 16) {
+          newErrors.cardNumber = "Número do cartão inválido";
+        }
+        if (!formData.cardExpiry || formData.cardExpiry.length < 5) {
+          newErrors.cardExpiry = "Data de validade inválida";
+        }
+        if (!formData.cardCVV || formData.cardCVV.length < 3) {
+          newErrors.cardCVV = "CVV inválido";
+        }
+        if (!cardHolderName) newErrors.cardHolderName = "Nome do titular é obrigatório";
+      }
       
       if (Object.keys(newErrors).length > 0) {
         setErrors(newErrors);
         throw new Error("Por favor, corrija os erros no formulário.");
       }
 
+      if (!sessionId) {
+        throw new Error("Sessão de pagamento não iniciada. Recarregue a página.");
+      }
+
       setIsProcessing(true);
+      setIsLoadingPayment(true);
 
       setCustomer({
         name: formData.name,
@@ -239,15 +372,36 @@ export default function CheckoutPage() {
         phone: formData.phone
       });
 
-      // CHAMADA REAL PARA O PAGBANK
-      const res = await fetch('/api/checkout', {
+      let finalSenderHash = '';
+      let finalCardToken: string | undefined;
+
+      if (paymentMethod === 'pix') {
+        finalSenderHash = await getSenderHash();
+      } else if (paymentMethod === 'credit_card') {
+        finalSenderHash = await getSenderHash();
+        finalCardToken = await getCardToken(
+          formData.cardNumber,
+          formData.cardCVV,
+          formData.cardExpiry,
+          cardBrand || 'visa'
+        );
+      } else {
+        throw new Error('Método de pagamento não suportado');
+      }
+
+      const res = await fetch('/api/pagbank/charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items,
           customer: formData,
           pickupPoint,
-          thermalBagOption
+          thermalBagOption,
+          paymentMethod,
+          senderHash: finalSenderHash,
+          cardToken: finalCardToken,
+          installments: selectedInstallment,
+          cardHolderName,
         })
       });
 
@@ -255,17 +409,31 @@ export default function CheckoutPage() {
 
       if (data.error) throw new Error(data.error);
 
-      // Redireciona para o checkout do PagBank (Cartão ou PIX lá dentro)
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('Link de pagamento não recebido.');
+      if (paymentMethod === 'pix' && data.pix) {
+        setPixData({
+          qrcode: data.pix.qrcode,
+          text: data.pix.text,
+        });
+      } else if (paymentMethod === 'credit_card') {
+        if (data.status === 'PAID' || data.status === 'AUTHORIZED') {
+          setSuccessData({
+            orderId: data.orderId,
+            message: 'Pagamento aprovado! Obrigado pela compra.',
+          });
+          setTimeout(() => {
+            clearCart();
+            router.push('/pedido/sucesso');
+          }, 2000);
+        } else {
+          throw new Error(`Pagamento em análise. Status: ${data.status}`);
+        }
       }
 
     } catch (err: any) {
       setApiError(err.message);
     } finally {
       setIsProcessing(false);
+      setIsLoadingPayment(false);
     }
   };
 
@@ -460,73 +628,143 @@ export default function CheckoutPage() {
                  </div>
                </div>
 
-               {paymentMethod === 'credit_card' && (
-                 <div className="grid grid-cols-2 gap-8 animate-in fade-in slide-in-from-top-4 duration-500">
-                   <div className="col-span-2 space-y-3">
-                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Número do Cartão</label>
-                     <div className="relative">
-                        <input
-                          type="text"
-                          name="cardNumber"
-                          value={formData.cardNumber}
-                          onChange={handleInputChange}
-                          placeholder="0000 0000 0000 0000"
-                          className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white placeholder:text-neutral-800 outline-none focus:border-[#22C55E]/30 font-bold text-sm"
-                        />
-                        <div className="absolute right-5 top-1/2 -translate-y-1/2 flex items-center gap-3">
-                           {cardBrand ? (
-                             <div className="bg-white px-2.5 py-1.5 rounded-lg shadow-2xl animate-in fade-in zoom-in duration-500">
-                               {!logoError ? (
-                                 <img 
-                                   src={`https://stc.pagseguro.uol.com.br/public/img/payment-methods-flags/68x30/${cardBrand}.png`} 
-                                   alt={cardBrand}
-                                   className="h-4 w-auto object-contain"
-                                   onError={() => setLogoError(true)}
-                                 />
-                               ) : (
-                                 <span className="text-[9px] font-black uppercase text-neutral-900 tracking-tight">
-                                   {cardBrand}
-                                 </span>
-                               )}
-                             </div>
-                           ) : (
-                             <div className="bg-white/5 px-2.5 py-1.5 rounded-lg border border-white/10">
-                               <CreditCard className="w-5 h-5 text-neutral-800" />
-                             </div>
-                           )}
+                {paymentMethod === 'credit_card' && (
+                  <div className="grid grid-cols-2 gap-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="col-span-2 space-y-3">
+                      <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Número do Cartão</label>
+                      <div className="relative">
+                         <input
+                           type="text"
+                           name="cardNumber"
+                           value={formData.cardNumber}
+                           onChange={(e) => handleCardNumberChange(e.target.value)}
+                           placeholder="0000 0000 0000 0000"
+                           className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white placeholder:text-neutral-800 outline-none focus:border-[#22C55E]/30 font-bold text-sm"
+                         />
+                         <div className="absolute right-5 top-1/2 -translate-y-1/2 flex items-center gap-3">
+                            {cardBrand ? (
+                              <div className="bg-white px-2.5 py-1.5 rounded-lg shadow-2xl animate-in fade-in zoom-in duration-500">
+                                {!logoError ? (
+                                  <img 
+                                    src={`https://stc.pagseguro.uol.com.br/public/img/payment-methods-flags/68x30/${cardBrand}.png`} 
+                                    alt={cardBrand}
+                                    className="h-4 w-auto object-contain"
+                                    onError={() => setLogoError(true)}
+                                  />
+                                ) : (
+                                  <span className="text-[9px] font-black uppercase text-neutral-900 tracking-tight">
+                                    {cardBrand}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="bg-white/5 px-2.5 py-1.5 rounded-lg border border-white/10">
+                                <CreditCard className="w-5 h-5 text-neutral-800" />
+                              </div>
+                            )}
+                         </div>
+                      </div>
+                      {errors.cardNumber && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.cardNumber}</p>}
+                    </div>
+                    <div className="col-span-2 space-y-3">
+                      <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Nome do Titular do Cartão</label>
+                      <input
+                        type="text"
+                        name="cardHolderName"
+                        value={cardHolderName}
+                        onChange={(e) => {
+                          setCardHolderName(e.target.value.toUpperCase());
+                          if (errors.cardHolderName) {
+                            setErrors(prev => {
+                              const newErrs = { ...prev };
+                              delete newErrs.cardHolderName;
+                              return newErrs;
+                            });
+                          }
+                        }}
+                        placeholder="NOME COMO ESTÁ NO CARTÃO"
+                        className={`w-full bg-black/40 border rounded-2xl p-5 text-white placeholder:text-neutral-800 outline-none focus:border-[#22C55E]/30 font-bold text-sm uppercase ${errors.cardHolderName ? 'border-red-500/50' : 'border-white/5'}`}
+                      />
+                      {errors.cardHolderName && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.cardHolderName}</p>}
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Vencimento</label>
+                      <input
+                        type="text"
+                        name="cardExpiry"
+                        value={formData.cardExpiry}
+                        onChange={handleInputChange}
+                        placeholder="MM/AA"
+                        className={`w-full bg-black/40 border rounded-2xl p-5 text-white placeholder:text-neutral-800 outline-none focus:border-[#22C55E]/30 font-bold text-sm ${errors.cardExpiry ? 'border-red-500/50' : 'border-white/5'}`}
+                      />
+                      {errors.cardExpiry && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.cardExpiry}</p>}
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Código CVV</label>
+                      <input
+                        type="text"
+                        name="cardCVV"
+                        value={formData.cardCVV}
+                        onChange={handleInputChange}
+                        placeholder="123"
+                        className={`w-full bg-black/40 border rounded-2xl p-5 text-white placeholder:text-neutral-800 outline-none focus:border-[#22C55E]/30 font-bold text-sm ${errors.cardCVV ? 'border-red-500/50' : 'border-white/5'}`}
+                      />
+                      {errors.cardCVV && <p className="text-[10px] text-red-500 font-bold uppercase pl-1">{errors.cardCVV}</p>}
+                    </div>
+                    {installments.length > 0 && (
+                      <div className="col-span-2 space-y-3">
+                        <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Parcelas</label>
+                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                          {installments.map((inst) => (
+                            <button
+                              key={inst.quantity}
+                              type="button"
+                              onClick={() => setSelectedInstallment(inst.quantity)}
+                              className={`p-3 rounded-xl border text-center transition-all ${
+                                selectedInstallment === inst.quantity
+                                  ? 'border-[#22C55E] bg-[#22C55E]/10'
+                                  : 'border-white/10 bg-black/40 hover:border-white/30'
+                              }`}
+                            >
+                              <div className="text-xs font-bold text-white">{inst.quantity}x</div>
+                              <div className="text-[10px] font-medium text-neutral-400">
+                                R$ {inst.amount.toFixed(2).replace('.', ',')}
+                              </div>
+                            </button>
+                          ))}
                         </div>
-                     </div>
-                   </div>
-                   <div className="space-y-3">
-                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Vencimento</label>
-                     <input
-                       type="text"
-                       name="cardExpiry"
-                       value={formData.cardExpiry}
-                       onChange={handleInputChange}
-                       placeholder="MM/AA"
-                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white placeholder:text-neutral-800 outline-none focus:border-[#22C55E]/30 font-bold text-sm"
-                     />
-                   </div>
-                   <div className="space-y-3">
-                     <label className="text-[10px] font-medium text-white/40 uppercase pl-1">Código CVV</label>
-                     <input
-                       type="text"
-                       name="cardCVV"
-                       value={formData.cardCVV}
-                       onChange={handleInputChange}
-                       placeholder="123"
-                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white placeholder:text-neutral-800 outline-none focus:border-[#22C55E]/30 font-bold text-sm"
-                     />
-                   </div>
-                 </div>
-               )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-               {paymentMethod === 'pix' && (
-                 <div className="bg-black/40 p-10 rounded-3xl border border-white/5 text-center animate-in fade-in duration-500">
-                    <p className="text-neutral-500 font-bold uppercase text-xs">Aguardando geração do QR Code...</p>
-                 </div>
-               )}
+                {paymentMethod === 'pix' && (
+                  <div className="bg-black/40 p-8 rounded-3xl border border-white/5 animate-in fade-in duration-500">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 rounded-2xl bg-[#22C55E]/10 flex items-center justify-center">
+                        <QrCode className="w-6 h-6 text-[#22C55E]" />
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-sm uppercase">Pagamento Instantâneo</p>
+                        <p className="text-neutral-500 text-xs">Aprovação em segundos</p>
+                      </div>
+                    </div>
+                    <div className="space-y-3 text-left">
+                      <div className="flex items-center gap-3 text-neutral-400 text-xs">
+                        <div className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold">1</div>
+                        <span>Clique em Finalizar Compra</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-neutral-400 text-xs">
+                        <div className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold">2</div>
+                        <span>Escaneie o QR Code com seu banco</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-neutral-400 text-xs">
+                        <div className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold">3</div>
+                        <span>Pagamento aprovado na hora</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
             </section>
           </div>
 
@@ -582,21 +820,28 @@ export default function CheckoutPage() {
                  </div>
                )}
 
-               <button 
-                  disabled={isProcessing}
-                  onClick={handleFinish}
-                  className={`group relative w-full py-1.5 rounded-full font-medium text-[10px] uppercase transition-all flex items-center justify-center gap-10 shadow-2xl overflow-hidden ${isProcessing ? 'bg-white/5 text-white/20' : 'bg-[#22C55E] text-black hover:scale-[1.01] active:scale-95 hover:shadow-[#22C55E]/20'}`}
-               >
-                 <span className="relative z-10 transition-colors">
-                   {isProcessing ? "Processando..." : "Finalizar Compra"}
-                 </span>
-                 
-                 {!isProcessing && (
-                   <div className="relative w-9 h-9 rounded-xl bg-black/10 flex items-center justify-center transition-all duration-500 group-hover:rotate-[45deg]">
-                     <ArrowRight className="w-5 h-5 text-black group-hover:rotate-[-45deg] transition-all duration-500" />
-                   </div>
-                 )}
-               </button>
+                <button 
+                   disabled={isProcessing}
+                   onClick={handleFinish}
+                   className={`group relative w-full py-1.5 rounded-full font-medium text-[10px] uppercase transition-all flex items-center justify-center gap-10 shadow-2xl overflow-hidden ${isProcessing ? 'bg-white/5 text-white/20' : 'bg-[#22C55E] text-black hover:scale-[1.01] active:scale-95 hover:shadow-[#22C55E]/20'}`}
+                >
+                  <span className="relative z-10 transition-colors flex items-center gap-3">
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {isLoadingPayment ? "Processando pagamento..." : "Aguarde..."}
+                      </>
+                    ) : (
+                      "Finalizar Compra"
+                    )}
+                  </span>
+                  
+                  {!isProcessing && (
+                    <div className="relative w-9 h-9 rounded-xl bg-black/10 flex items-center justify-center transition-all duration-500 group-hover:rotate-[45deg]">
+                      <ArrowRight className="w-5 h-5 text-black group-hover:rotate-[-45deg] transition-all duration-500" />
+                    </div>
+                  )}
+                </button>
                
                <p className="text-[9px] text-center text-white/20 mt-10 uppercase font-medium leading-relaxed">
                  MayNutri • Premium Experience • 2024

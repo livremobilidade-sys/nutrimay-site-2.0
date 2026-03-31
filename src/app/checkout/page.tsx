@@ -74,7 +74,7 @@ export default function CheckoutPage() {
   const [cardHolderName, setCardHolderName] = useState("");
 
   useEffect(() => {
-    console.log('TORTA - Checkout com processamento de pagamento');
+    console.log('PUDIM - Nova versao com charges array');
     setMounted(true);
 
     const loadPagBankScript = async () => {
@@ -356,14 +356,14 @@ export default function CheckoutPage() {
         const pkData = await pkRes.json();
         const publicKey = pkData.publicKey;
         
-        console.log('TORTA - Public key exists:', !!publicKey);
-        console.log('TORTA - Public key length:', publicKey?.length);
+        console.log('PUDIM - Public key exists:', !!publicKey);
+        console.log('PUDIM - Public key length:', publicKey?.length);
         
         if (!publicKey) {
           throw new Error('Chave pública não configurada. Contate o administrador.');
         }
         
-        console.log('TORTA - Encrypting card with publicKey...');
+        console.log('PUDIM - Encrypting card with publicKey...');
         
         const result = window.PagSeguro.encryptCard({
           publicKey,

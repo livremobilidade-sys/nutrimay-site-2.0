@@ -160,12 +160,14 @@ export async function POST(request: Request) {
           'Accept': 'application/json',
         },
         body: JSON.stringify({
-          payment_method: {
-            type: 'PIX',
-            pix: {
-              expiration_time: 3600,
+          charges: [{
+            payment_method: {
+              type: 'PIX',
+              pix: {
+                expiration_time: 3600,
+              },
             },
-          },
+          }],
         }),
       });
       
@@ -187,8 +189,6 @@ export async function POST(request: Request) {
         status: payData.charge?.status || 'WAITING_PAYMENT',
       };
     } else if (paymentMethod === 'credit_card') {
-      const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);
-      
       const payRes = await fetch(`${PAGBANK_URL}/${orderId}/pay`, {
         method: 'POST',
         headers: {
@@ -197,18 +197,20 @@ export async function POST(request: Request) {
           'Accept': 'application/json',
         },
         body: JSON.stringify({
-          payment_method: {
-            type: 'CREDIT_CARD',
-            installments: installments,
-            capture: true,
-            card: {
-              encrypted: encryptedCard,
+          charges: [{
+            payment_method: {
+              type: 'CREDIT_CARD',
+              installments: installments,
+              capture: true,
+              card: {
+                encrypted: encryptedCard,
+              },
+              holder: {
+                name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
+                tax_id: customer?.cpf ? customer.cpf.replace(/\D/g, '') : '33813392813',
+              },
             },
-            holder: {
-              name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
-              tax_id: customer?.cpf ? customer.cpf.replace(/\D/g, '') : '33813392813',
-            },
-          },
+          }],
         }),
       });
       

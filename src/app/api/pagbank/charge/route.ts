@@ -143,28 +143,92 @@ export async function POST(request: Request) {
       throw new Error(message);
     }
 
-    const charge = data.charge;
+    const orderId = data.id;
+    console.log('Order created:', orderId);
+    
     let paymentData: any = {
       reference_id: referenceId,
-      orderId: data.id,
+      orderId: orderId,
     };
 
-    if (paymentMethod === 'pix' && charge?.payment_method?.pix) {
+    if (paymentMethod === 'pix') {
+      const payRes = await fetch(`${PAGBANK_URL}/${orderId}/pay`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${PAGBANK_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          payment_method: {
+            type: 'PIX',
+            pix: {
+              expiration_time: 3600,
+            },
+          },
+        }),
+      });
+      
+      const payText = await payRes.text();
+      console.log('PIX pay response:', payText);
+      let payData;
+      try { payData = JSON.parse(payText); } catch { payData = payText; }
+      
+      if (!payRes.ok) {
+        throw new Error('Erro ao processar PIX: ' + (payData.error_messages?.[0]?.description || payData.message));
+      }
+      
       paymentData = {
         ...paymentData,
         pix: {
-          qrcode: charge.payment_method.pix.qr_code?.image?.plain,
-          text: charge.payment_method.pix.qr_code?.text,
+          qrcode: payData.charge?.payment_method?.pix?.qr_code?.image?.plain,
+          text: payData.charge?.payment_method?.pix?.qr_code?.text,
         },
-        status: charge.status,
+        status: payData.charge?.status || 'WAITING_PAYMENT',
       };
     } else if (paymentMethod === 'credit_card') {
+      const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);
+      
+      const payRes = await fetch(`${PAGBANK_URL}/${orderId}/pay`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${PAGBANK_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          payment_method: {
+            type: 'CREDIT_CARD',
+            installments: installments,
+            capture: true,
+            card: {
+              encrypted: encryptedCard,
+            },
+            holder: {
+              name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
+              tax_id: customer?.cpf ? customer.cpf.replace(/\D/g, '') : '33813392813',
+            },
+          },
+        }),
+      });
+      
+      const payText = await payRes.text();
+      console.log('Credit card pay response:', payText);
+      let payData;
+      try { payData = JSON.parse(payText); } catch { payData = payText; }
+      
+      if (!payRes.ok) {
+        throw new Error('Erro ao processar cartão: ' + (payData.error_messages?.[0]?.description || payData.message));
+      }
+      
       paymentData = {
         ...paymentData,
-        status: charge?.status,
-        cardBrand: charge?.payment_method?.card?.brand,
+        status: payData.charge?.status || 'PROCESSING',
+        cardBrand: payData.charge?.payment_method?.card?.brand,
       };
     }
+
+    return NextResponse.json(paymentData);
 
     return NextResponse.json(paymentData);
 

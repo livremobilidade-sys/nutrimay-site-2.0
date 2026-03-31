@@ -112,8 +112,7 @@ export async function POST(request: Request) {
     console.log('--- PAYLOAD ENVIADO AO PAGBANK (CHARGE) ---');
     console.log(JSON.stringify(payload, null, 2));
     console.log('Encrypted card (first 50 chars):', encryptedCard?.substring(0, 50));
-    console.log('Card brand:', cardBrand);
-    console.log('Cardholder:', cardHolderName);
+    console.log('Installments:', installments);
 
     const response = await fetch(PAGBANK_URL, {
       method: 'POST',

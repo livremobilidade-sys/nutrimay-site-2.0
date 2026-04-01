@@ -6,6 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useCartStore } from '@/store/useCartStore';
 import { ChevronLeft, Package, Clock, CheckCircle2, XCircle, AlertCircle, X, QrCode, ClipboardCheck, CreditCard, RefreshCw, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -23,6 +24,7 @@ interface Order {
   pickupPoint: string;
   userEmail?: string;
   userName?: string;
+  thermalBag?: boolean;
 }
 
 const getStatusConfig = (status: string) => {
@@ -478,14 +480,19 @@ export default function PedidosPage() {
                         Seu pagamento foi recusado. Você pode tentar novamente com outra forma de pagamento.
                       </p>
                       
-                      <Link 
-                        href="/checkout"
-                        onClick={() => setShowModal(false)}
+                      <button 
+                        onClick={() => {
+                          const { restoreFromOrder } = useCartStore.getState();
+                          const thermalBagOption = selectedOrder.thermalBag ? 'new' : undefined;
+                          restoreFromOrder(selectedOrder.items, selectedOrder.pickupPoint, thermalBagOption);
+                          setShowModal(false);
+                          router.push('/checkout');
+                        }}
                         className="w-full py-3 rounded-xl bg-[#22C55E] text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#22C55E]/90 transition-colors"
                       >
                         <CreditCard className="w-4 h-4" />
                         Tentar Novamente
-                      </Link>
+                      </button>
                     </div>
                   )}
                 </div>

@@ -36,6 +36,7 @@ interface CartStore {
   setThermalBagOption: (option: "new" | "exchange") => void;
   setCustomer: (customer: Customer) => void;
   clearCart: () => void;
+  restoreFromOrder: (items: any[], pickupPoint?: string, thermalBagOption?: "new" | "exchange") => void;
   isCartOpen: boolean;
   openCart: () => void;
   closeCart: () => void;
@@ -79,6 +80,19 @@ export const useCartStore = create<CartStore>()(
       setThermalBagOption: (option) => set({ thermalBagOption: option }),
       setCustomer: (customer) => set({ customer: customer }),
       clearCart: () => set({ items: [], pickupPoint: null, thermalBagOption: null, customer: null }),
+      restoreFromOrder: (items, pickupPoint, thermalBagOption) => set({ 
+        items: items.map((item: any) => ({
+          id: item.id || item.name?.toLowerCase().replace(/\s+/g, '-'),
+          name: item.name,
+          description: '',
+          price: (item.unitAmount || 0) / 100,
+          image: '',
+          benefits: [],
+          quantity: item.quantity,
+        })),
+        pickupPoint: pickupPoint || null,
+        thermalBagOption: thermalBagOption || null,
+      }),
       openCart: () => set({ isCartOpen: true }),
       closeCart: () => set({ isCartOpen: false }),
 

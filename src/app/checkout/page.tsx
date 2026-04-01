@@ -2,7 +2,7 @@
 
 import { useCartStore } from "@/store/useCartStore";
 import { useState, useEffect, useRef } from "react";
-import { ChevronLeft, CreditCard, QrCode, ClipboardCheck, CheckCircle2, AlertCircle, ShieldCheck, Lock as LockIcon, ArrowRight, Check, Edit2, Loader2 } from "lucide-react";
+import { ChevronLeft, CreditCard, QrCode, ClipboardCheck, CheckCircle2, AlertCircle, ShieldCheck, Lock as LockIcon, ArrowRight, Check, Edit2, Loader2, RefreshCw, Clock } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
@@ -76,6 +76,8 @@ export default function CheckoutPage() {
   const [modalType, setModalType] = useState<'loading' | 'success' | 'error'>('loading');
   const [modalMessage, setModalMessage] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [pixOrderId, setPixOrderId] = useState<string | null>(null);
+  const [isCheckingPix, setIsCheckingPix] = useState(false);
 
   useEffect(() => {
     console.log('PUDIM - Nova versao com charges array');
@@ -427,6 +429,7 @@ export default function CheckoutPage() {
           qrcode: data.pix.qrcode,
           text: data.pix.text,
         });
+        setPixOrderId(data.orderId);
         setShowModal(false);
       } else if (paymentMethod === 'credit_card') {
         if (data.status === 'PAID' || data.status === 'AUTHORIZED') {
@@ -494,13 +497,21 @@ export default function CheckoutPage() {
       <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-6 lg:p-12 animate-in fade-in slide-in-from-bottom-5 duration-500">
         <div className="max-w-md w-full bg-[#1a1a1c] border border-white/5 rounded-3xl p-8 text-center shadow-2xl">
           <QrCode className="w-16 h-16 text-[#22C55E] mx-auto mb-6" />
-          <h2 className="text-2xl font-bold text-white mb-2">Finalize seu PIX</h2>
-          <p className="text-neutral-400 text-sm mb-8 leading-relaxed">
+          <h2 className="text-2xl font-bold text-white mb-2">Aguardando Pagamento PIX</h2>
+          <p className="text-neutral-400 text-sm mb-4 leading-relaxed">
             Escaneie o código abaixo com o app do seu banco ou utilize o "PIX Copia e Cola".
           </p>
           
-          <div className="bg-white p-4 rounded-2xl mb-8 flex justify-center shadow-inner">
+          <div className="bg-white p-4 rounded-2xl mb-6 flex justify-center shadow-inner">
              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixData.text)}`} alt="PIX QR" className="w-full max-w-[200px]" />
+          </div>
+
+          <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+            <p className="text-amber-400 text-xs font-bold uppercase mb-2">Status do Pagamento</p>
+            <div className="flex items-center justify-center gap-2 text-amber-400">
+              <Clock className="w-5 h-5 animate-pulse" />
+              <span className="text-sm font-medium">Aguardando confirmação...</span>
+            </div>
           </div>
 
           <button 
@@ -508,10 +519,52 @@ export default function CheckoutPage() {
               navigator.clipboard.writeText(pixData.text);
               alert("Código PIX copiado!");
             }}
-            className="w-full py-4 rounded-xl bg-white/5 text-white font-bold border border-white/10 flex items-center justify-center gap-2 hover:bg-white/10 transition-colors"
+            className="w-full py-3 rounded-xl bg-white/5 text-white font-bold border border-white/10 flex items-center justify-center gap-2 hover:bg-white/10 transition-colors"
           >
             <ClipboardCheck className="w-5 h-5" />
             Copia e Cola
+          </button>
+
+          <button 
+            onClick={async () => {
+              if (!pixOrderId || isCheckingPix) return;
+              
+              setIsCheckingPix(true);
+              try {
+                const res = await fetch(`/api/pagbank/status?id=${pixOrderId}`);
+                const data = await res.json();
+                
+                console.log('🔄 [PIX] Status check:', data.status);
+                
+                if (data.status === 'PAID' || data.status === 'AUTHORIZED') {
+                  setModalType('success');
+                  setModalMessage('Pagamento aprovado! Obrigado pela compra.');
+                  setShowModal(true);
+                  setTimeout(() => {
+                    clearCart();
+                    router.push('/pedidos');
+                  }, 2000);
+                } else if (data.status === 'DECLINED' || data.status === 'CANCELED') {
+                  setModalType('error');
+                  setModalMessage(`Pagamento recusado. Tente novamente.`);
+                  setShowModal(true);
+                  setTimeout(() => {
+                    setShowModal(false);
+                  }, 3000);
+                } else {
+                  alert('Pagamento ainda não confirmado. Aguarde mais alguns segundos e tente novamente.');
+                }
+              } catch (err) {
+                console.error('Erro ao verificar pagamento:', err);
+              } finally {
+                setIsCheckingPix(false);
+              }
+            }}
+            disabled={isCheckingPix}
+            className="w-full mt-3 py-3 rounded-xl bg-white/5 text-white font-bold border border-white/10 flex items-center justify-center gap-2 hover:bg-white/10 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isCheckingPix ? 'animate-spin' : ''}`} />
+            {isCheckingPix ? 'Verificando...' : 'Verificar Pagamento'}
           </button>
 
           <button 
@@ -521,8 +574,12 @@ export default function CheckoutPage() {
             }}
             className="w-full mt-4 py-4 rounded-xl bg-[#22C55E] text-black font-bold uppercase tracking-tight hover:scale-[1.02] transition-transform"
           >
-            Já realizei o pagamento
+            Ir para Meus Pedidos
           </button>
+          
+          <p className="text-neutral-500 text-xs mt-4">
+            O pagamento será aprovado automaticamente após a confirmação do banco.
+          </p>
         </div>
       </div>
     );

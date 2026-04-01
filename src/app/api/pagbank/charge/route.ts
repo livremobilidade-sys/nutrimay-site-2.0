@@ -174,12 +174,15 @@ export async function POST(request: Request) {
 
     if (customer?.email || userId) {
       try {
+        const userEmailLower = customer?.email?.toLowerCase() || null;
+        
         await addDoc(collection(db, 'orders'), {
           referenceId: referenceId,
           orderId: orderId,
           pagbankOrderId: orderId,
           userId: userId || null,
-          userEmail: customer?.email || null,
+          userEmail: userEmailLower,
+          userEmailOriginal: customer?.email || null,
           userName: customer?.name || null,
           userCpf: customer?.cpf || null,
           userPhone: customer?.phone || null,
@@ -196,7 +199,7 @@ export async function POST(request: Request) {
           createdAt: new Date(),
           updatedAt: new Date(),
         });
-        console.log('Order saved to Firestore:', referenceId);
+        console.log('Order saved to Firestore:', referenceId, 'userId:', userId, 'email:', userEmailLower);
       } catch (saveErr) {
         console.error('Error saving order to Firestore:', saveErr);
       }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, Package, Clock, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
@@ -75,47 +75,65 @@ export default function PedidosPage() {
       console.log('🔍 [Pedidos] Usuário logado:', currentUser.email, currentUser.uid);
       
       try {
+        const allOrders: any[] = [];
+        
         // First try by userId
         let q = query(
           collection(db, 'orders'),
-          where('userId', '==', currentUser.uid),
-          orderBy('createdAt', 'desc')
+          where('userId', '==', currentUser.uid)
         );
         
         let snapshot = await getDocs(q);
         console.log('🔍 [Pedidos] Pedidos por userId:', snapshot.size);
         
+        snapshot.forEach(doc => allOrders.push({ id: doc.id, ...doc.data() }));
+        
         // If no results, try by email
-        if (snapshot.empty && currentUser.email) {
+        if (allOrders.length === 0 && currentUser.email) {
           q = query(
             collection(db, 'orders'),
-            where('userEmail', '==', currentUser.email),
-            orderBy('createdAt', 'desc')
+            where('userEmail', '==', currentUser.email.toLowerCase())
           );
           snapshot = await getDocs(q);
           console.log('🔍 [Pedidos] Pedidos por email:', snapshot.size);
-        }
-        
-        // If still empty, get ALL orders and filter client-side (for debugging)
-        if (snapshot.empty) {
-          console.log('🔍 [Pedidos] Nenhum pedido encontrado, buscando todos...');
-          q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
-          snapshot = await getDocs(q);
-          console.log('🔍 [Pedidos] Total de pedidos no banco:', snapshot.size);
           
-          // Show all orders for debugging
           snapshot.forEach(doc => {
-            const data = doc.data();
-            console.log('🔍 [Pedidos] Pedido:', doc.id, 'email:', data.userEmail, 'userId:', data.userId);
+            if (!allOrders.find(o => o.id === doc.id)) {
+              allOrders.push({ id: doc.id, ...doc.data() });
+            }
           });
         }
         
-        const ordersData: Order[] = [];
+        // If still empty, get ALL orders and filter client-side (for debugging)
+        if (allOrders.length === 0) {
+          console.log('🔍 [Pedidos] Nenhum pedido encontrado, buscando todos...');
+          q = query(collection(db, 'orders'));
+          snapshot = await getDocs(q);
+          console.log('🔍 [Pedidos] Total de pedidos no banco:', snapshot.size);
+          
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            console.log('🔍 [Pedidos] Pedido:', doc.id, 'email:', data.userEmail, 'userId:', data.userId);
+            
+            // Match by userId or email
+            if (data.userId === currentUser.uid || 
+                (currentUser.email && data.userEmail?.toLowerCase() === currentUser.email.toLowerCase())) {
+              if (!allOrders.find(o => o.id === doc.id)) {
+                allOrders.push({ id: doc.id, ...data });
+              }
+            }
+          });
+        }
         
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          ordersData.push({
-            id: doc.id,
+        // Sort by createdAt descending on client side
+        const ordersData: Order[] = allOrders
+          .sort((a, b) => {
+            const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
+            const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
+            return dateB - dateA;
+          })
+          .map((data: any) => ({
+            id: data.id,
             referenceId: data.referenceId || '',
             orderId: data.orderId || data.pagbankOrderId || '',
             status: data.status || 'pending',
@@ -124,13 +142,41 @@ export default function PedidosPage() {
             paymentMethod: data.paymentMethod || 'credit_card',
             items: data.items || [],
             pickupPoint: data.pickupPoint || '',
-          });
-        });
+          }));
         
         console.log('🔍 [Pedidos] Pedidos carregados:', ordersData.length);
         setOrders(ordersData);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Erro ao buscar pedidos:', error);
+        if (error.message?.includes('index')) {
+          console.error('🔍 [Pedidos] Erro de índice. Tentando buscar sem filtros...');
+          // Fallback: get all and filter
+          try {
+            const q = query(collection(db, 'orders'));
+            const snapshot = await getDocs(q);
+            const ordersData: Order[] = [];
+            snapshot.forEach((doc) => {
+              const data = doc.data();
+              if (data.userId === currentUser.uid || 
+                  (currentUser.email && data.userEmail?.toLowerCase() === currentUser.email.toLowerCase())) {
+                ordersData.push({
+                  id: doc.id,
+                  referenceId: data.referenceId || '',
+                  orderId: data.orderId || data.pagbankOrderId || '',
+                  status: data.status || 'pending',
+                  total: data.total || 0,
+                  createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+                  paymentMethod: data.paymentMethod || 'credit_card',
+                  items: data.items || [],
+                  pickupPoint: data.pickupPoint || '',
+                });
+              }
+            });
+            setOrders(ordersData);
+          } catch (fallbackError) {
+            console.error('Erro no fallback:', fallbackError);
+          }
+        }
       } finally {
         setLoading(false);
       }

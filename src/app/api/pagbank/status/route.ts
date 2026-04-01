@@ -14,7 +14,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const res = await fetch(`${PAGBANK_BASE}/checkouts/${id}`, {
+    // Try orders endpoint first (newer API)
+    let res = await fetch(`${PAGBANK_BASE}/orders/${id}`, {
       headers: {
         'Authorization': `Bearer ${PAGBANK_TOKEN}`,
         'Accept': 'application/json',
@@ -22,11 +23,20 @@ export async function GET(request: Request) {
     });
 
     if (!res.ok) {
-      return NextResponse.json({ status: 'PENDING' });
+      // Fallback to checkouts endpoint
+      res = await fetch(`${PAGBANK_BASE}/checkouts/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${PAGBANK_TOKEN}`,
+          'Accept': 'application/json',
+        },
+      });
+    }
+
+    if (!res.ok) {
+      return NextResponse.json({ status: 'PENDING', error: 'Not found' });
     }
 
     const data = await res.json();
-    // The checkout status comes in the order/charges
     const chargeStatus = data.charges?.[0]?.status || data.status || 'PENDING';
 
     return NextResponse.json({ status: chargeStatus, data });

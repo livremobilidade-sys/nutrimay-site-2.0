@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, getDocs, orderBy, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, addDoc, doc, updateDoc, deleteDoc, where, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Package, Calendar, Plus, ChevronLeft, Edit, Trash2, X, Check, Eye, Clock, CheckCircle2, Truck, Users } from 'lucide-react';
+import { Package, Calendar, Plus, ChevronLeft, Edit, Trash2, X, Check, Eye, Clock, CheckCircle2, Truck, Users, PlusCircle, MinusCircle, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -19,41 +19,8 @@ interface Batch {
   status: string;
   orderIds: string[];
   createdAt: any;
+  code?: string;
 }
-
-const getBatchInfo = (createdAt: any) => {
-  const now = new Date();
-  const orderDate = createdAt?.toDate ? createdAt.toDate() : now;
-  
-  const day = orderDate.getDay();
-  const hour = orderDate.getHours();
-  
-  const tuesday14 = new Date(orderDate);
-  tuesday14.setHours(14, 0, 0, 0);
-  
-  if (day === 2 && hour < 14) {
-    const wednesday = new Date(orderDate);
-    wednesday.setDate(wednesday.getDate() + (3 - wednesday.getDay() + 7) % 7);
-    return {
-      batchName: `Quarta ${wednesday.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`,
-      deliveryDay: 'Quarta',
-      isThisWeek: true
-    };
-  }
-  
-  const nextWednesday = new Date(orderDate);
-  if (day === 2 && hour >= 14) {
-    nextWednesday.setDate(nextWednesday.getDate() + 7);
-  } else if (day > 2 || day === 3 || day === 4 || day === 5 || day === 6) {
-    nextWednesday.setDate(nextWednesday.getDate() + ((3 - nextWednesday.getDay() + 7) % 7 || 7));
-  }
-  
-  return {
-    batchName: `Quarta ${nextWednesday.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`,
-    deliveryDay: 'Próxima Quarta',
-    isThisWeek: false
-  };
-};
 
 interface Order {
   id: string;
@@ -68,7 +35,83 @@ interface Order {
   delivered?: boolean;
   deliveredAt?: any;
   batchId?: string;
+  createdAt: any;
 }
+
+const getDeliveryDateForOrder = (orderDate: Date): Date => {
+  const day = orderDate.getDay();
+  const hour = orderDate.getHours();
+  const minutes = orderDate.getMinutes();
+  
+  const isBeforeCutoff = day === 2 && hour < 14;
+  
+  let deliveryDate = new Date(orderDate);
+  
+  if (isBeforeCutoff) {
+    const daysUntilWednesday = (3 - day + 7) % 7 || 7;
+    deliveryDate.setDate(orderDate.getDate() + daysUntilWednesday);
+  } else {
+    const daysUntilWednesday = (3 - day + 7) % 7;
+    deliveryDate.setDate(orderDate.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
+  }
+  
+  deliveryDate.setHours(0, 0, 0, 0);
+  return deliveryDate;
+};
+
+const generateBatchCode = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
+
+const getNextDeliveryDate = () => {
+  const now = new Date();
+  const day = now.getDay();
+  const hour = now.getHours();
+  
+  const isBeforeCutoff = day < 2 || (day === 2 && hour < 14);
+  
+  let deliveryDate = new Date(now);
+  
+  if (isBeforeCutoff) {
+    const daysUntilWednesday = (3 - day + 7) % 7 || 7;
+    deliveryDate.setDate(now.getDate() + daysUntilWednesday);
+  } else {
+    const daysUntilWednesday = (3 - day + 7) % 7;
+    deliveryDate.setDate(now.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
+  }
+  
+  deliveryDate.setHours(0, 0, 0, 0);
+  return deliveryDate;
+};
+
+const getNextCutoffDate = () => {
+  const now = new Date();
+  const day = now.getDay();
+  const hour = now.getHours();
+  
+  const isBeforeCutoff = day < 2 || (day === 2 && hour < 14);
+  
+  let cutoffDate = new Date(now);
+  
+  if (isBeforeCutoff) {
+    cutoffDate.setHours(14, 0, 0, 0);
+  } else {
+    if (day === 2 && hour >= 14) {
+      cutoffDate.setDate(cutoffDate.getDate() + 7);
+    } else {
+      const daysUntilNextTuesday = (2 - day + 7) % 7 || 7;
+      cutoffDate.setDate(now.getDate() + daysUntilNextTuesday);
+    }
+    cutoffDate.setHours(14, 0, 0, 0);
+  }
+  
+  return cutoffDate;
+};
 
 export default function AdminBatchesPage() {
   const router = useRouter();
@@ -77,6 +120,7 @@ export default function AdminBatchesPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showAddOrderModal, setShowAddOrderModal] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -84,6 +128,7 @@ export default function AdminBatchesPage() {
     deliveryDate: '',
     cutoffDate: ''
   });
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -154,96 +199,20 @@ export default function AdminBatchesPage() {
     }
   };
 
-  const generateBatchCode = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
-  };
-
-  const calculateNextDeliveryDate = () => {
-    const now = new Date();
-    const day = now.getDay();
-    const hour = now.getHours();
-    const minutes = now.getMinutes();
-    
-    // Total minutes past Tuesday 14:00
-    const tuesday14 = new Date(now);
-    tuesday14.setHours(14, 0, 0, 0);
-    
-    const isBeforeTuesday14 = day === 2 && (hour < 14 || (hour === 14 && minutes < 1));
-    const isBeforeCutoff = day < 2 || (day === 2 && hour < 14);
-    
-    let deliveryDate = new Date(now);
-    
-    if (isBeforeCutoff) {
-      // Delivery this Wednesday
-      const daysUntilWednesday = (3 - day + 7) % 7 || 7;
-      deliveryDate.setDate(now.getDate() + daysUntilWednesday);
-    } else {
-      // Delivery next Wednesday
-      const daysUntilWednesday = (3 - day + 7) % 7;
-      deliveryDate.setDate(now.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
-    }
-    
-    deliveryDate.setHours(0, 0, 0, 0);
-    
-    return deliveryDate.toISOString().split('T')[0];
-  };
-
-  const createBatchAutomatically = async () => {
-    const unassignedOrders = getUnassignedOrders();
-    
-    if (unassignedOrders.length === 0) {
-      alert('Não há pedidos sem lote para criar um novo lote!');
-      return;
-    }
-
-    const batchCode = generateBatchCode();
-    const deliveryDate = calculateNextDeliveryDate();
-    
-    const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-    const deliveryDayName = dayNames[new Date(deliveryDate).getDay()];
-    
-    const batchName = `${deliveryDayName} - ${batchCode}`;
-    
-    if (!confirm(`Criar lote "${batchName}" para ${new Date(deliveryDate).toLocaleDateString('pt-BR')} com ${unassignedOrders.length} pedidos?`)) {
-      return;
-    }
-
-    try {
-      const batchDoc = await addDoc(collection(db, 'batches'), {
-        name: batchName,
-        code: batchCode,
-        deliveryDate: deliveryDate,
-        cutoffDate: new Date().toISOString(),
-        status: 'pending',
-        orderIds: unassignedOrders.map(o => o.id),
-        createdAt: new Date(),
-      });
-
-      // Assign all orders to this batch
-      for (const order of unassignedOrders) {
-        await updateDoc(doc(db, 'orders', order.id), {
-          batchId: batchDoc.id,
-          batchName: batchName,
-        });
-      }
-
-      alert(`Lote "${batchName}" criado com ${unassignedOrders.length} pedidos!`);
-      fetchData();
-    } catch (error) {
-      console.error('Error creating batch automatically:', error);
-      alert('Erro ao criar lote automaticamente');
-    }
-  };
-
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este lote?')) return;
+    if (!confirm('Tem certeza que deseja excluir este lote? Os pedidos ficarão sem lote.')) return;
     
     try {
+      const batch = batches.find(b => b.id === id);
+      if (batch?.orderIds) {
+        for (const orderId of batch.orderIds) {
+          await updateDoc(doc(db, 'orders', orderId), {
+            batchId: null,
+            batchName: null,
+          });
+        }
+      }
+      
       await deleteDoc(doc(db, 'batches', id));
       fetchData();
     } catch (error) {
@@ -263,23 +232,49 @@ export default function AdminBatchesPage() {
     }
   };
 
-  const assignOrdersToBatch = async (batchId: string, orderIds: string[]) => {
+  const removeOrderFromBatch = async (orderId: string, batchId: string) => {
+    if (!confirm('Remover este pedido do lote?')) return;
+    
     try {
-      for (const orderId of orderIds) {
-        await updateDoc(doc(db, 'orders', orderId), {
-          batchId: batchId,
-        });
-      }
+      const batch = batches.find(b => b.id === batchId);
+      const newOrderIds = batch?.orderIds?.filter(id => id !== orderId) || [];
+      
+      await updateDoc(doc(db, 'batches', batchId), {
+        orderIds: newOrderIds,
+      });
+      
+      await updateDoc(doc(db, 'orders', orderId), {
+        batchId: null,
+        batchName: null,
+      });
+      
       fetchData();
-      alert(`${orderIds.length} pedidos atribuídos ao lote!`);
     } catch (error) {
-      console.error('Error assigning orders:', error);
+      console.error('Error removing order from batch:', error);
     }
   };
 
-  const openBatchDetails = (batch: Batch) => {
-    setSelectedBatch(batch);
-    setShowDetailModal(true);
+  const addOrderToBatch = async (orderId: string) => {
+    if (!selectedBatch) return;
+    
+    try {
+      const currentOrderIds = selectedBatch.orderIds || [];
+      
+      await updateDoc(doc(db, 'batches', selectedBatch.id), {
+        orderIds: [...currentOrderIds, orderId],
+      });
+      
+      await updateDoc(doc(db, 'orders', orderId), {
+        batchId: selectedBatch.id,
+        batchName: selectedBatch.name,
+      });
+      
+      setShowAddOrderModal(false);
+      fetchData();
+      setSelectedBatch(batches.find(b => b.id === selectedBatch.id) || null);
+    } catch (error) {
+      console.error('Error adding order to batch:', error);
+    }
   };
 
   const getOrdersInBatch = (batchOrderIds: string[]) => {
@@ -294,6 +289,77 @@ export default function AdminBatchesPage() {
 
   const getOrdersByBatch = (batchId: string) => {
     return orders.filter(o => o.batchId === batchId && (o.status === 'PAID' || o.status === 'AUTHORIZED'));
+  };
+
+  const getAvailableOrdersForBatch = () => {
+    const currentBatchOrderIds = selectedBatch?.orderIds || [];
+    const deliveryDate = selectedBatch?.deliveryDate ? new Date(selectedBatch.deliveryDate) : null;
+    
+    return orders.filter(o => {
+      const isPaid = o.status === 'PAID' || o.status === 'AUTHORIZED';
+      const notInBatch = !currentBatchOrderIds.includes(o.id);
+      
+      if (!deliveryDate || notInBatch === false) return isPaid && notInBatch;
+      
+      const orderDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date();
+      const orderDeliveryDate = getDeliveryDateForOrder(orderDate);
+      
+      const sameWeek = deliveryDate.toDateString() === orderDeliveryDate.toDateString();
+      
+      return isPaid && notInBatch && sameWeek;
+    });
+  };
+
+  const createBatchAutomatically = async () => {
+    const nextDelivery = getNextDeliveryDate();
+    const nextCutoff = getNextCutoffDate();
+    const batchCode = generateBatchCode();
+    
+    const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    const deliveryDayName = dayNames[nextDelivery.getDay()];
+    
+    const batchName = `${deliveryDayName} - ${batchCode}`;
+    
+    const unassignedOrders = getUnassignedOrders();
+    const ordersForThisDelivery = unassignedOrders.filter(o => {
+      const orderDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date();
+      const orderDeliveryDate = getDeliveryDateForOrder(orderDate);
+      return orderDeliveryDate.toDateString() === nextDelivery.toDateString();
+    });
+    
+    if (ordersForThisDelivery.length === 0) {
+      alert(`Não há pedidos para criar lote de ${nextDelivery.toLocaleDateString('pt-BR')}`);
+      return;
+    }
+
+    if (!confirm(`Criar lote "${batchName}" para ${nextDelivery.toLocaleDateString('pt-BR')} com ${ordersForThisDelivery.length} pedidos?`)) {
+      return;
+    }
+
+    try {
+      const batchDoc = await addDoc(collection(db, 'batches'), {
+        name: batchName,
+        code: batchCode,
+        deliveryDate: nextDelivery.toISOString().split('T')[0],
+        cutoffDate: nextCutoff.toISOString(),
+        status: 'pending',
+        orderIds: ordersForThisDelivery.map(o => o.id),
+        createdAt: new Date(),
+      });
+
+      for (const order of ordersForThisDelivery) {
+        await updateDoc(doc(db, 'orders', order.id), {
+          batchId: batchDoc.id,
+          batchName: batchName,
+        });
+      }
+
+      alert(`Lote "${batchName}" criado com ${ordersForThisDelivery.length} pedidos!`);
+      fetchData();
+    } catch (error) {
+      console.error('Error creating batch automatically:', error);
+      alert('Erro ao criar lote automaticamente');
+    }
   };
 
   const generateBatchPDF = (batch: Batch) => {
@@ -353,6 +419,11 @@ export default function AdminBatchesPage() {
     doc.save(fileName);
   };
 
+  const openBatchDetails = (batch: Batch) => {
+    setSelectedBatch(batch);
+    setShowDetailModal(true);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
@@ -360,6 +431,9 @@ export default function AdminBatchesPage() {
       </div>
     );
   }
+
+  const nextDelivery = getNextDeliveryDate();
+  const nextCutoff = getNextCutoffDate();
 
   return (
     <div className="min-h-screen bg-[#09090b] text-white">
@@ -372,20 +446,23 @@ export default function AdminBatchesPage() {
             </Link>
             <h1 className="text-2xl font-black tracking-tighter uppercase">Lotes de Entrega</h1>
           </div>
-          <button 
-            onClick={() => { setShowModal(true); setEditingId(null); setFormData({ name: '', deliveryDate: '', cutoffDate: '' }); }}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-white font-bold text-sm uppercase rounded-xl hover:bg-white/10 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Novo Lote
-          </button>
-          <button 
-            onClick={createBatchAutomatically}
-            className="flex items-center gap-2 px-4 py-2 bg-[#22C55E] text-black font-bold text-sm uppercase rounded-xl hover:scale-105 transition-transform"
-          >
-            <Calendar className="w-4 h-4" />
-            Criar Lote Automático
-          </button>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => { setShowModal(true); setEditingId(null); setFormData({ name: '', deliveryDate: '', cutoffDate: '' }); }}
+              className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-white font-bold text-sm uppercase rounded-xl hover:bg-white/10 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Novo Lote
+            </button>
+            <button 
+              onClick={createBatchAutomatically}
+              disabled={getUnassignedOrders().length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-[#22C55E] text-black font-bold text-sm uppercase rounded-xl hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Calendar className="w-4 h-4" />
+              Criar Lote Automático
+            </button>
+          </div>
         </div>
       </header>
 
@@ -415,12 +492,18 @@ export default function AdminBatchesPage() {
 
         <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-6 mb-8">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Clock className="w-5 h-5 text-amber-400" />
+            <div className="flex items-center gap-6">
               <div>
-                <h3 className="text-lg font-bold text-amber-400">Próxima Entrega</h3>
-                <p className="text-neutral-400 text-sm">
-                  {new Date(calculateNextDeliveryDate()).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+                <p className="text-amber-400 text-xs font-bold uppercase mb-1">Próxima Entrega</p>
+                <p className="text-white font-black text-lg">
+                  {nextDelivery.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+                </p>
+              </div>
+              <div className="h-10 w-px bg-white/10" />
+              <div>
+                <p className="text-amber-400 text-xs font-bold uppercase mb-1">Corte (até)</p>
+                <p className="text-white font-bold">
+                  {nextCutoff.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'short' })} às 14:00
                 </p>
               </div>
             </div>
@@ -441,11 +524,11 @@ export default function AdminBatchesPage() {
             <h2 className="text-xl font-bold text-white mb-2">Nenhum lote criado</h2>
             <p className="text-neutral-500 mb-6">Crie lotes para controlar as entregas.</p>
             <button 
-              onClick={() => { setShowModal(true); setEditingId(null); setFormData({ name: '', deliveryDate: '', cutoffDate: '' }); }}
+              onClick={createBatchAutomatically}
               className="inline-flex items-center gap-2 px-6 py-3 bg-[#22C55E] text-black font-bold text-sm uppercase rounded-full hover:scale-105 transition-transform"
             >
-              <Plus className="w-4 h-4" />
-              Criar Lote
+              <Calendar className="w-4 h-4" />
+              Criar Primeiro Lote
             </button>
           </div>
         ) : (
@@ -555,7 +638,7 @@ export default function AdminBatchesPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative bg-[#0c0c0e] border border-white/10 rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+              className="relative bg-[#0c0c0e] border border-white/10 rounded-3xl p-8 w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl"
             >
               <button 
                 onClick={() => setShowDetailModal(false)}
@@ -564,21 +647,35 @@ export default function AdminBatchesPage() {
                 <X className="w-5 h-5" />
               </button>
               
-              <h2 className="text-xl font-black mb-2">{selectedBatch.name}</h2>
-              <p className="text-neutral-500 text-sm mb-6">
-                Entrega: {new Date(selectedBatch.deliveryDate).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
-              </p>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-black mb-1">{selectedBatch.name}</h2>
+                  <p className="text-neutral-500 text-sm">
+                    Entrega: {new Date(selectedBatch.deliveryDate).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setSelectedBatch(selectedBatch);
+                    setShowAddOrderModal(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#22C55E] text-black font-bold text-sm rounded-xl"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  Adicionar Pedido
+                </button>
+              </div>
 
               <button 
                 onClick={() => generateBatchPDF(selectedBatch)}
-                className="flex items-center gap-2 px-4 py-2 bg-[#22C55E] text-black font-bold text-sm rounded-xl mb-6 hover:scale-105 transition-transform"
+                className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-white font-bold text-sm rounded-xl mb-6 hover:bg-white/10 transition-colors w-full justify-center"
               >
                 <Users className="w-4 h-4" />
                 Baixar Relatório PDF
               </button>
 
               <div className="space-y-3">
-                {getOrdersByBatch(selectedBatch.id).map(order => (
+                {getOrdersInBatch(selectedBatch.orderIds || []).map(order => (
                   <div 
                     key={order.id}
                     className={`p-4 rounded-xl border ${
@@ -587,37 +684,51 @@ export default function AdminBatchesPage() {
                         : 'bg-white/5 border-white/10'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="font-bold text-white">#{order.referenceId?.slice(-6)}</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <p className="font-bold text-white">#{order.referenceId?.slice(-6)}</p>
+                          <p className="text-neutral-500 text-xs">
+                            {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+                          </p>
+                        </div>
                         <p className="text-neutral-500 text-sm">{order.userName || order.userEmail}</p>
                         <p className="text-neutral-500 text-xs">{order.pickupPoint}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="font-black text-lg text-white">R$ {order.total?.toFixed(2).replace('.', ',')}</p>
+                      <div className="text-right flex items-center gap-4">
+                        <div>
+                          <p className="font-black text-lg text-white">R$ {order.total?.toFixed(2).replace('.', ',')}</p>
+                          <button 
+                            onClick={async () => {
+                              await updateDoc(doc(db, 'orders', order.id), {
+                                delivered: !order.delivered,
+                                deliveredAt: !order.delivered ? new Date() : null,
+                              });
+                              fetchData();
+                            }}
+                            className={`flex items-center gap-1 text-xs font-bold uppercase mt-2 ${
+                              order.delivered ? 'text-[#22C55E]' : 'text-amber-400'
+                            }`}
+                          >
+                            {order.delivered ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3" />
+                                Entregue
+                              </>
+                            ) : (
+                              <>
+                                <Clock className="w-3 h-3" />
+                                Pendente
+                              </>
+                            )}
+                          </button>
+                        </div>
                         <button 
-                          onClick={async () => {
-                            await updateDoc(doc(db, 'orders', order.id), {
-                              delivered: !order.delivered,
-                              deliveredAt: !order.delivered ? new Date() : null,
-                            });
-                            fetchData();
-                          }}
-                          className={`flex items-center gap-1 text-xs font-bold uppercase mt-2 ${
-                            order.delivered ? 'text-[#22C55E]' : 'text-amber-400'
-                          }`}
+                          onClick={() => removeOrderFromBatch(order.id, selectedBatch.id)}
+                          className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                          title="Remover do lote"
                         >
-                          {order.delivered ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3" />
-                              Entregue
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="w-3 h-3" />
-                              Pendente
-                            </>
-                          )}
+                          <MinusCircle className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
@@ -625,8 +736,95 @@ export default function AdminBatchesPage() {
                 ))}
               </div>
 
-              {getOrdersByBatch(selectedBatch.id).length === 0 && (
+              {getOrdersInBatch(selectedBatch.orderIds || []).length === 0 && (
                 <p className="text-neutral-500 text-center py-8">Nenhum pedido neste lote.</p>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Order Modal */}
+      <AnimatePresence>
+        {showAddOrderModal && selectedBatch && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowAddOrderModal(false)} />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-[#0c0c0e] border border-white/10 rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+            >
+              <button 
+                onClick={() => setShowAddOrderModal(false)}
+                className="absolute top-4 right-4 p-2 text-neutral-500 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <h2 className="text-xl font-black mb-2">Adicionar Pedido ao Lote</h2>
+              <p className="text-neutral-500 text-sm mb-6">
+                Adicionando ao lote: {selectedBatch.name}
+              </p>
+
+              <div className="relative mb-4">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                <input 
+                  type="text"
+                  placeholder="Buscar pedido..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white placeholder:text-neutral-500 focus:border-[#22C55E]/30 outline-none"
+                />
+              </div>
+
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {getAvailableOrdersForBatch()
+                  .filter(o => {
+                    if (!searchTerm) return true;
+                    const search = searchTerm.toLowerCase();
+                    return (
+                      o.referenceId?.toLowerCase().includes(search) ||
+                      o.userName?.toLowerCase().includes(search) ||
+                      o.userEmail?.toLowerCase().includes(search)
+                    );
+                  })
+                  .map(order => (
+                    <div 
+                      key={order.id}
+                      className="p-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="font-bold text-white">#{order.referenceId?.slice(-6)}</p>
+                        <p className="text-neutral-500 text-xs">
+                          {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+                        </p>
+                        <p className="text-neutral-400 text-sm">{order.userName || order.userEmail}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-white">R$ {order.total?.toFixed(2).replace('.', ',')}</p>
+                        <button 
+                          onClick={() => addOrderToBatch(order.id)}
+                          className="flex items-center gap-1 text-xs text-[#22C55E] font-bold uppercase mt-1"
+                        >
+                          <PlusCircle className="w-3 h-3" />
+                          Adicionar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+
+              {getAvailableOrdersForBatch().filter(o => {
+                if (!searchTerm) return true;
+                const search = searchTerm.toLowerCase();
+                return (
+                  o.referenceId?.toLowerCase().includes(search) ||
+                  o.userName?.toLowerCase().includes(search) ||
+                  o.userEmail?.toLowerCase().includes(search)
+                );
+              }).length === 0 && (
+                <p className="text-neutral-500 text-center py-8">Nenhum pedido disponível para adicionar.</p>
               )}
             </motion.div>
           </div>
@@ -652,7 +850,7 @@ export default function AdminBatchesPage() {
               </button>
               
               <h2 className="text-xl font-black mb-6">
-                {editingId ? 'Editar Lote' : 'Novo Lote'}
+                {editingId ? 'Editar Lote' : 'Novo Lote (Manual)'}
               </h2>
               
               <div className="space-y-4">
@@ -662,7 +860,7 @@ export default function AdminBatchesPage() {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Ex: Quarta - 02/04"
+                    placeholder="Ex: Quarta - ABC123"
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-500 focus:border-[#22C55E]/30 outline-none"
                   />
                 </div>
@@ -700,3 +898,53 @@ export default function AdminBatchesPage() {
     </div>
   );
 }
+
+const getBatchInfo = (createdAt: any) => {
+  const now = new Date();
+  const orderDate = createdAt?.toDate ? createdAt.toDate() : now;
+  
+  const day = orderDate.getDay();
+  const hour = orderDate.getHours();
+  
+  const tuesday14 = new Date(orderDate);
+  tuesday14.setHours(14, 0, 0, 0);
+  
+  if (day === 2 && hour < 14) {
+    const wednesday = new Date(orderDate);
+    wednesday.setDate(wednesday.getDate() + (3 - wednesday.getDay() + 7) % 7);
+    return {
+      batchName: `Quarta ${wednesday.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`,
+      deliveryDay: 'Quarta',
+      isThisWeek: true
+    };
+  }
+  
+  const nextWednesday = new Date(orderDate);
+  if (day === 2 && hour >= 14) {
+    nextWednesday.setDate(nextWednesday.getDate() + 7);
+  } else if (day > 2 || day === 3 || day === 4 || day === 5 || day === 6) {
+    nextWednesday.setDate(nextWednesday.getDate() + ((3 - nextWednesday.getDay() + 7) % 7 || 7));
+  }
+  
+  return {
+    batchName: `Quarta ${nextWednesday.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`,
+    deliveryDay: 'Próxima Quarta',
+    isThisWeek: false
+  };
+};
+
+interface Order {
+  id: string;
+  referenceId: string;
+  userName: string;
+  userEmail: string;
+  userPhone: string;
+  total: number;
+  status: string;
+  items: any[];
+  pickupPoint: string;
+  delivered?: boolean;
+  deliveredAt?: any;
+  batchId?: string;
+}
+

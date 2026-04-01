@@ -154,6 +154,92 @@ export default function AdminBatchesPage() {
     }
   };
 
+  const generateBatchCode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  };
+
+  const calculateNextDeliveryDate = () => {
+    const now = new Date();
+    const day = now.getDay();
+    const hour = now.getHours();
+    const minutes = now.getMinutes();
+    
+    // Total minutes past Tuesday 14:00
+    const tuesday14 = new Date(now);
+    tuesday14.setHours(14, 0, 0, 0);
+    
+    const isBeforeTuesday14 = day === 2 && (hour < 14 || (hour === 14 && minutes < 1));
+    const isBeforeCutoff = day < 2 || (day === 2 && hour < 14);
+    
+    let deliveryDate = new Date(now);
+    
+    if (isBeforeCutoff) {
+      // Delivery this Wednesday
+      const daysUntilWednesday = (3 - day + 7) % 7 || 7;
+      deliveryDate.setDate(now.getDate() + daysUntilWednesday);
+    } else {
+      // Delivery next Wednesday
+      const daysUntilWednesday = (3 - day + 7) % 7;
+      deliveryDate.setDate(now.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
+    }
+    
+    deliveryDate.setHours(0, 0, 0, 0);
+    
+    return deliveryDate.toISOString().split('T')[0];
+  };
+
+  const createBatchAutomatically = async () => {
+    const unassignedOrders = getUnassignedOrders();
+    
+    if (unassignedOrders.length === 0) {
+      alert('Não há pedidos sem lote para criar um novo lote!');
+      return;
+    }
+
+    const batchCode = generateBatchCode();
+    const deliveryDate = calculateNextDeliveryDate();
+    
+    const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    const deliveryDayName = dayNames[new Date(deliveryDate).getDay()];
+    
+    const batchName = `${deliveryDayName} - ${batchCode}`;
+    
+    if (!confirm(`Criar lote "${batchName}" para ${new Date(deliveryDate).toLocaleDateString('pt-BR')} com ${unassignedOrders.length} pedidos?`)) {
+      return;
+    }
+
+    try {
+      const batchDoc = await addDoc(collection(db, 'batches'), {
+        name: batchName,
+        code: batchCode,
+        deliveryDate: deliveryDate,
+        cutoffDate: new Date().toISOString(),
+        status: 'pending',
+        orderIds: unassignedOrders.map(o => o.id),
+        createdAt: new Date(),
+      });
+
+      // Assign all orders to this batch
+      for (const order of unassignedOrders) {
+        await updateDoc(doc(db, 'orders', order.id), {
+          batchId: batchDoc.id,
+          batchName: batchName,
+        });
+      }
+
+      alert(`Lote "${batchName}" criado com ${unassignedOrders.length} pedidos!`);
+      fetchData();
+    } catch (error) {
+      console.error('Error creating batch automatically:', error);
+      alert('Erro ao criar lote automaticamente');
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este lote?')) return;
     
@@ -288,10 +374,17 @@ export default function AdminBatchesPage() {
           </div>
           <button 
             onClick={() => { setShowModal(true); setEditingId(null); setFormData({ name: '', deliveryDate: '', cutoffDate: '' }); }}
-            className="flex items-center gap-2 px-4 py-2 bg-[#22C55E] text-black font-bold text-sm uppercase rounded-xl hover:scale-105 transition-transform"
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-white font-bold text-sm uppercase rounded-xl hover:bg-white/10 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Novo Lote
+          </button>
+          <button 
+            onClick={createBatchAutomatically}
+            className="flex items-center gap-2 px-4 py-2 bg-[#22C55E] text-black font-bold text-sm uppercase rounded-xl hover:scale-105 transition-transform"
+          >
+            <Calendar className="w-4 h-4" />
+            Criar Lote Automático
           </button>
         </div>
       </header>
@@ -321,15 +414,25 @@ export default function AdminBatchesPage() {
         </div>
 
         <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-6 mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Clock className="w-5 h-5 text-amber-400" />
-            <h3 className="text-lg font-bold text-amber-400">Como funciona</h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Clock className="w-5 h-5 text-amber-400" />
+              <div>
+                <h3 className="text-lg font-bold text-amber-400">Próxima Entrega</h3>
+                <p className="text-neutral-400 text-sm">
+                  {new Date(calculateNextDeliveryDate()).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={createBatchAutomatically}
+              disabled={getUnassignedOrders().length === 0}
+              className="flex items-center gap-2 px-6 py-3 bg-[#22C55E] text-black font-bold text-sm uppercase rounded-xl hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Calendar className="w-4 h-4" />
+              Criar Lote Agora ({getUnassignedOrders().length} pedidos)
+            </button>
           </div>
-          <p className="text-neutral-400 text-sm">
-            • Pedidos feitos até Terça 14:00 → Entrega nesta Quarta<br/>
-            • Pedidos feitos após Terça 14:01 → Próxima Quarta<br/>
-            • Cada lote representa uma data de entrega específica.
-          </p>
         </div>
 
         {batches.length === 0 ? (

@@ -15,8 +15,11 @@ export async function POST(request: Request) {
       const charge = charges[0];
       const referenceId = body.reference_id || charge.reference_id || '';
       const status = charge.status; // PAID, DECLINED, CANCELED, etc.
+      
+      // Get refusal reason if available
+      const refusalReason = charge.cancellation_reason || charge.reject_reason || charge.payment_method?.card?.brand?.errors?.[0]?.message || null;
 
-      console.log(`🔔 [Webhook] Evento: ${event} | Pedido: ${referenceId} | Status: ${status}`);
+      console.log(`🔔 [Webhook] Evento: ${event} | Pedido: ${referenceId} | Status: ${status} | Motivo: ${refusalReason}`);
 
       // Map PagBank status to our internal status
       const statusMap: Record<string, string> = {
@@ -40,13 +43,20 @@ export async function POST(request: Request) {
 
           if (!snap.empty) {
             const orderDoc = snap.docs[0];
-            await updateDoc(doc(db, 'orders', orderDoc.id), {
+            const updateData: any = {
               status: internalStatus,
               paymentStatus: internalStatus,
               pagbankStatus: status,
               updatedAt: new Date(),
-            });
-            console.log(`✅ [Webhook] Pedido ${referenceId} atualizado para: ${internalStatus}`);
+            };
+            
+            // Add refusal reason if declined
+            if (refusalReason) {
+              updateData.refusalReason = refusalReason;
+            }
+            
+            await updateDoc(doc(db, 'orders', orderDoc.id), updateData);
+            console.log(`✅ [Webhook] Pedido ${referenceId} atualizado para: ${internalStatus}${refusalReason ? ` (Motivo: ${refusalReason})` : ''}`);
           } else {
             console.log(`⚠️ [Webhook] Pedido ${referenceId} não encontrado no Firestore.`);
           }

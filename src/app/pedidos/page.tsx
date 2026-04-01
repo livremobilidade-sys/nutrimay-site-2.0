@@ -25,6 +25,7 @@ interface Order {
   userEmail?: string;
   userName?: string;
   thermalBag?: boolean;
+  refusalReason?: string;
 }
 
 const getStatusConfig = (status: string) => {
@@ -179,6 +180,7 @@ export default function PedidosPage() {
             userEmail: data.userEmail || '',
             userName: data.userName || '',
             thermalBag: data.thermalBag || false,
+            refusalReason: data.refusalReason || '',
           }));
         
         setOrders(ordersData);
@@ -476,6 +478,13 @@ export default function PedidosPage() {
                         <XCircle className="w-5 h-5 text-red-400" />
                         <span className="text-red-400 font-bold text-sm">Pagamento Recusado</span>
                       </div>
+                      
+                      {selectedOrder.refusalReason && (
+                        <div className="mb-3 p-3 bg-red-500/5 rounded-lg border border-red-500/10">
+                          <p className="text-neutral-500 text-xs font-bold uppercase mb-1">Motivo:</p>
+                          <p className="text-red-400 text-sm">{selectedOrder.refusalReason}</p>
+                        </div>
+                      )}
                       
                       <p className="text-neutral-400 text-sm mb-4">
                         Seu pagamento foi recusado. Você pode tentar novamente com outra forma de pagamento.

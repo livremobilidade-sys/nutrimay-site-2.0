@@ -1,31 +1,59 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, getDocs, orderBy, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, addDoc, doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Truck, Calendar, Plus, Users, MapPin, ChevronLeft, Edit, Trash2, X, Check } from 'lucide-react';
+import { Truck, Calendar, Plus, Users, MapPin, ChevronLeft, Edit, Trash2, X, Check, Eye, CheckCircle2, XCircle, Clock, FileText, Download, Package } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
-interface DeliveryGroup {
+interface PickupPoint {
   id: string;
   name: string;
-  date: string;
+  address: string;
+  responsibleName: string;
+  responsiblePhone: string;
+  instructions: string;
+  active: boolean;
+}
+
+interface Order {
+  id: string;
+  referenceId: string;
+  userName: string;
+  userEmail: string;
+  userPhone: string;
+  total: number;
   status: string;
-  orderIds: string[];
-  createdAt: string;
+  items: any[];
+  pickupPoint: string;
+  delivered?: boolean;
+  deliveredAt?: any;
+  deliveryStatus?: string;
+  createdAt: any;
 }
 
 export default function AdminDeliveriesPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [deliveries, setDeliveries] = useState<DeliveryGroup[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
+  const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedPickupPoint, setSelectedPickupPoint] = useState<PickupPoint | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ name: '', date: '' });
+  const [formData, setFormData] = useState({
+    name: '',
+    address: '',
+    responsibleName: '',
+    responsiblePhone: '',
+    instructions: '',
+    active: true
+  });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -42,23 +70,21 @@ export default function AdminDeliveriesPage() {
 
   const fetchData = async () => {
     try {
-      // Fetch delivery groups
-      const qDeliveries = query(collection(db, 'deliveryGroups'), orderBy('date', 'desc'));
-      const deliveriesSnap = await getDocs(qDeliveries);
-      const deliveriesData: DeliveryGroup[] = [];
+      const qPickupPoints = query(collection(db, 'pickupPoints'), orderBy('name', 'asc'));
+      const pickupSnap = await getDocs(qPickupPoints);
+      const pickupData: PickupPoint[] = [];
       
-      deliveriesSnap.forEach(doc => {
-        deliveriesData.push({ id: doc.id, ...doc.data() } as DeliveryGroup);
+      pickupSnap.forEach(doc => {
+        pickupData.push({ id: doc.id, ...doc.data() } as PickupPoint);
       });
-      setDeliveries(deliveriesData);
+      setPickupPoints(pickupData);
 
-      // Fetch all orders for assignment
       const qOrders = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
       const ordersSnap = await getDocs(qOrders);
-      const ordersData: any[] = [];
+      const ordersData: Order[] = [];
       
       ordersSnap.forEach(doc => {
-        ordersData.push({ id: doc.id, ...doc.data() });
+        ordersData.push({ id: doc.id, ...doc.data() } as Order);
       });
       setOrders(ordersData);
     } catch (error) {
@@ -69,55 +95,162 @@ export default function AdminDeliveriesPage() {
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.date) return;
+    if (!formData.name || !formData.address) return;
 
     try {
       if (editingId) {
-        await updateDoc(doc(db, 'deliveryGroups', editingId), {
+        await updateDoc(doc(db, 'pickupPoints', editingId), {
           name: formData.name,
-          date: formData.date,
+          address: formData.address,
+          responsibleName: formData.responsibleName,
+          responsiblePhone: formData.responsiblePhone,
+          instructions: formData.instructions,
+          active: formData.active,
         });
       } else {
-        await addDoc(collection(db, 'deliveryGroups'), {
+        await addDoc(collection(db, 'pickupPoints'), {
           name: formData.name,
-          date: formData.date,
-          status: 'pending',
-          orderIds: [],
+          address: formData.address,
+          responsibleName: formData.responsibleName,
+          responsiblePhone: formData.responsiblePhone,
+          instructions: formData.instructions,
+          active: formData.active,
           createdAt: new Date(),
         });
       }
       
       setShowModal(false);
       setEditingId(null);
-      setFormData({ name: '', date: '' });
+      setFormData({
+        name: '',
+        address: '',
+        responsibleName: '',
+        responsiblePhone: '',
+        instructions: '',
+        active: true
+      });
       fetchData();
     } catch (error) {
-      console.error('Error saving delivery:', error);
+      console.error('Error saving pickup point:', error);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta entrega?')) return;
+    if (!confirm('Tem certeza que deseja excluir este ponto de entrega?')) return;
     
     try {
-      await deleteDoc(doc(db, 'deliveryGroups', id));
+      await deleteDoc(doc(db, 'pickupPoints', id));
       fetchData();
     } catch (error) {
-      console.error('Error deleting delivery:', error);
+      console.error('Error deleting pickup point:', error);
     }
   };
 
-  const getOrdersInDelivery = (orderIds: string[]) => {
-    return orders.filter(o => orderIds?.includes(o.id));
+  const togglePickupPointActive = async (point: PickupPoint) => {
+    try {
+      await updateDoc(doc(db, 'pickupPoints', point.id), {
+        active: !point.active,
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error updating pickup point:', error);
+    }
   };
 
-  const getPendingOrders = () => {
-    // Get orders that are PAID but not assigned to any delivery
-    const assignedOrderIds = deliveries.flatMap(d => d.orderIds || []);
+  const toggleOrderDelivered = async (orderId: string, currentlyDelivered: boolean) => {
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        delivered: !currentlyDelivered,
+        deliveredAt: !currentlyDelivered ? new Date() : null,
+        deliveryStatus: !currentlyDelivered ? 'delivered' : 'pending',
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error updating order delivery status:', error);
+    }
+  };
+
+  const getOrdersForPickupPoint = (pickupPointName: string) => {
     return orders.filter(o => 
-      (o.status === 'PAID' || o.status === 'AUTHORIZED') && 
-      !assignedOrderIds.includes(o.id)
+      o.pickupPoint === pickupPointName && 
+      (o.status === 'PAID' || o.status === 'AUTHORIZED')
     );
+  };
+
+  const generatePDF = (pickupPoint: PickupPoint) => {
+    const pickupOrders = getOrdersForPickupPoint(pickupPoint.name);
+    const deliveredOrders = pickupOrders.filter(o => o.delivered);
+    const pendingOrders = pickupOrders.filter(o => !o.delivered);
+
+    const doc = new jsPDF();
+    
+    doc.setFontSize(18);
+    doc.text('Relatório de Entrega', 14, 20);
+    
+    doc.setFontSize(12);
+    doc.text(`Ponto de Entrega: ${pickupPoint.name}`, 14, 30);
+    doc.text(`Endereço: ${pickupPoint.address}`, 14, 36);
+    doc.text(`Responsável: ${pickupPoint.responsibleName}`, 14, 42);
+    doc.text(`Telefone: ${pickupPoint.responsiblePhone}`, 14, 48);
+    
+    doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 54);
+    doc.text(`Total de Pedidos: ${pickupOrders.length}`, 14, 60);
+    doc.text(`Entregues: ${deliveredOrders.length}`, 14, 66);
+    doc.text(`Pendentes: ${pendingOrders.length}`, 14, 72);
+
+    const totalValue = pickupOrders.reduce((acc, o) => acc + (o.total || 0), 0);
+    doc.text(`Valor Total: R$ ${totalValue.toFixed(2).replace('.', ',')}`, 14, 78);
+
+    if (deliveredOrders.length > 0) {
+      doc.setFontSize(14);
+      doc.text('Pedidos Entregues', 14, 90);
+      
+      const deliveredData = deliveredOrders.map(order => [
+        `#${order.referenceId?.slice(-6) || order.id.slice(-6)}`,
+        order.userName || order.userEmail || '-',
+        order.userPhone || '-',
+        `R$ ${order.total?.toFixed(2).replace('.', ',')}`,
+        order.deliveredAt?.toDate ? new Date(order.deliveredAt.toDate()).toLocaleDateString('pt-BR') : '-'
+      ]);
+
+      autoTable(doc, {
+        startY: 95,
+        head: [['Pedido', 'Cliente', 'Telefone', 'Valor', 'Data Entrega']],
+        body: deliveredData,
+        theme: 'striped',
+        headStyles: { fillColor: [34, 197, 94] },
+      });
+    }
+
+    if (pendingOrders.length > 0) {
+      const startY = deliveredOrders.length > 0 ? (deliveredOrders.length * 10) + 105 : 100;
+      
+      doc.setFontSize(14);
+      doc.text('Pedidos Pendentes', 14, startY);
+      
+      const pendingData = pendingOrders.map(order => [
+        `#${order.referenceId?.slice(-6) || order.id.slice(-6)}`,
+        order.userName || order.userEmail || '-',
+        order.userPhone || '-',
+        `R$ ${order.total?.toFixed(2).replace('.', ',')}`
+      ]);
+
+      autoTable(doc, {
+        startY: startY + 5,
+        head: [['Pedido', 'Cliente', 'Telefone', 'Valor']],
+        body: pendingData,
+        theme: 'striped',
+        headStyles: { fillColor: [245, 158, 11] },
+      });
+    }
+
+    const fileName = `entrega-${pickupPoint.name.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+  };
+
+  const openPickupPointDetails = (point: PickupPoint) => {
+    setSelectedPickupPoint(point);
+    setShowDetailModal(true);
   };
 
   if (loading) {
@@ -137,153 +270,186 @@ export default function AdminDeliveriesPage() {
               <ChevronLeft className="w-5 h-5" />
               <span className="text-sm font-bold uppercase">Voltar</span>
             </Link>
-            <h1 className="text-2xl font-black tracking-tighter uppercase">Entregas</h1>
+            <h1 className="text-2xl font-black tracking-tighter uppercase">Pontos de Entrega</h1>
           </div>
           <button 
-            onClick={() => { setShowModal(true); setEditingId(null); setFormData({ name: '', date: '' }); }}
+            onClick={() => { setShowModal(true); setEditingId(null); setFormData({ name: '', address: '', responsibleName: '', responsiblePhone: '', instructions: '', active: true }); }}
             className="flex items-center gap-2 px-4 py-2 bg-[#22C55E] text-black font-bold text-sm uppercase rounded-xl hover:scale-105 transition-transform"
           >
             <Plus className="w-4 h-4" />
-            Nova Entrega
+            Novo Ponto
           </button>
         </div>
       </header>
 
       <main className="container mx-auto px-6 py-8 max-w-7xl">
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-4 gap-4 mb-8">
           <div className="bg-white/[0.02] border border-white/10 rounded-2xl p-6">
-            <p className="text-neutral-500 text-xs font-bold uppercase mb-1">Total de Entregas</p>
-            <p className="text-3xl font-black">{deliveries.length}</p>
+            <p className="text-neutral-500 text-xs font-bold uppercase mb-1">Total de Pontos</p>
+            <p className="text-3xl font-black">{pickupPoints.length}</p>
+          </div>
+          <div className="bg-[#22C55E]/5 border border-[#22C55E]/20 rounded-2xl p-6">
+            <p className="text-[#22C55E] text-xs font-bold uppercase mb-1">Pontos Ativos</p>
+            <p className="text-3xl font-black text-[#22C55E]">
+              {pickupPoints.filter(p => p.active).length}
+            </p>
           </div>
           <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-6">
-            <p className="text-amber-400 text-xs font-bold uppercase mb-1">Pendentes</p>
+            <p className="text-amber-400 text-xs font-bold uppercase mb-1">Pedidos para Entrega</p>
             <p className="text-3xl font-black text-amber-400">
-              {deliveries.filter(d => d.status === 'pending').length}
+              {orders.filter(o => (o.status === 'PAID' || o.status === 'AUTHORIZED') && !o.delivered).length}
             </p>
           </div>
           <div className="bg-[#22C55E]/5 border border-[#22C55E]/20 rounded-2xl p-6">
-            <p className="text-[#22C55E] text-xs font-bold uppercase mb-1">Concluídas</p>
+            <p className="text-[#22C55E] text-xs font-bold uppercase mb-1">Já Entregues</p>
             <p className="text-3xl font-black text-[#22C55E]">
-              {deliveries.filter(d => d.status === 'completed').length}
+              {orders.filter(o => o.delivered).length}
             </p>
           </div>
         </div>
 
-        {/* Pending Orders to Assign */}
-        {getPendingOrders().length > 0 && (
-          <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-6 mb-8">
-            <div className="flex items-center gap-3 mb-4">
-              <Users className="w-5 h-5 text-amber-400" />
-              <h3 className="text-lg font-bold text-amber-400">Pedidos esperando entrega</h3>
-            </div>
-            <p className="text-neutral-400 text-sm mb-4">
-              Você tem {getPendingOrders().length} pedidos pagos que precisam ser adicionados a uma entrega.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {getPendingOrders().slice(0, 5).map(order => (
-                <span key={order.id} className="px-3 py-1 bg-amber-500/20 text-amber-400 text-xs rounded-full">
-                  #{order.referenceId?.slice(-6)} - R$ {order.total?.toFixed(2)}
-                </span>
-              ))}
-              {getPendingOrders().length > 5 && (
-                <span className="px-3 py-1 bg-amber-500/20 text-amber-400 text-xs rounded-full">
-                  +{getPendingOrders().length - 5} mais
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Delivery Groups */}
-        {deliveries.length === 0 ? (
+        {pickupPoints.length === 0 ? (
           <div className="text-center py-20">
-            <Truck className="w-16 h-16 text-neutral-700 mx-auto mb-6" />
-            <h2 className="text-xl font-bold text-white mb-2">Nenhuma entrega criada</h2>
-            <p className="text-neutral-500 mb-6">Crie grupos de entregas para organizar as entregas.</p>
+            <MapPin className="w-16 h-16 text-neutral-700 mx-auto mb-6" />
+            <h2 className="text-xl font-bold text-white mb-2">Nenhum ponto de entrega</h2>
+            <p className="text-neutral-500 mb-6">Crie pontos de entrega para organizar as entregas.</p>
             <button 
-              onClick={() => { setShowModal(true); setEditingId(null); setFormData({ name: '', date: '' }); }}
+              onClick={() => { setShowModal(true); setEditingId(null); setFormData({ name: '', address: '', responsibleName: '', responsiblePhone: '', instructions: '', active: true }); }}
               className="inline-flex items-center gap-2 px-6 py-3 bg-[#22C55E] text-black font-bold text-sm uppercase rounded-full hover:scale-105 transition-transform"
             >
               <Plus className="w-4 h-4" />
-              Criar Entrega
+              Criar Ponto de Entrega
             </button>
           </div>
         ) : (
           <div className="grid gap-4">
-            {deliveries.map((delivery, index) => {
-              const deliveryOrders = getOrdersInDelivery(delivery.orderIds || []);
-              const totalValue = deliveryOrders.reduce((acc, o) => acc + (o.total || 0), 0);
+            {pickupPoints.map((point, index) => {
+              const pointOrders = getOrdersForPickupPoint(point.name);
+              const deliveredCount = pointOrders.filter(o => o.delivered).length;
+              const pendingCount = pointOrders.filter(o => !o.delivered).length;
+              const totalValue = pointOrders.reduce((acc, o) => acc + (o.total || 0), 0);
               
               return (
                 <motion.div
-                  key={delivery.id}
+                  key={point.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 hover:border-white/20 transition-colors"
+                  className={`bg-white/[0.02] border rounded-3xl p-6 hover:border-white/20 transition-colors ${
+                    point.active ? 'border-white/10' : 'border-red-500/20 opacity-60'
+                  }`}
                 >
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-4">
                       <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                        delivery.status === 'completed' ? 'bg-[#22C55E]/10' : 'bg-amber-500/10'
+                        point.active ? 'bg-[#22C55E]/10' : 'bg-red-500/10'
                       }`}>
-                        <Truck className={`w-6 h-6 ${
-                          delivery.status === 'completed' ? 'text-[#22C55E]' : 'text-amber-400'
+                        <MapPin className={`w-6 h-6 ${
+                          point.active ? 'text-[#22C55E]' : 'text-red-400'
                         }`} />
                       </div>
                       <div>
-                        <p className="font-bold text-white text-lg">{delivery.name}</p>
+                        <p className="font-bold text-white text-lg">{point.name}</p>
                         <div className="flex items-center gap-2 text-neutral-500 text-sm">
-                          <Calendar className="w-4 h-4" />
-                          {new Date(delivery.date).toLocaleDateString('pt-BR', { 
-                            weekday: 'long', 
-                            day: '2-digit', 
-                            month: 'long' 
-                          })}
+                          <span>{point.address}</span>
                         </div>
+                        {point.responsibleName && (
+                          <div className="flex items-center gap-2 text-neutral-500 text-xs mt-1">
+                            <span>Responsável: {point.responsibleName}</span>
+                            <span>({point.responsiblePhone})</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     
                     <div className="flex items-center gap-4">
                       <div className="text-right">
                         <p className="text-neutral-500 text-xs font-bold uppercase">Pedidos</p>
-                        <p className="text-white font-black text-xl">{deliveryOrders.length}</p>
+                        <p className="text-white font-black text-xl">{pointOrders.length}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-neutral-500 text-xs font-bold uppercase">Valor</p>
                         <p className="text-white font-black">R$ {totalValue.toFixed(2).replace('.', ',')}</p>
                       </div>
-                      <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                        delivery.status === 'completed' 
-                          ? 'bg-[#22C55E]/10 text-[#22C55E]' 
-                          : 'bg-amber-500/10 text-amber-400'
-                      }`}>
-                        {delivery.status === 'completed' ? 'Concluída' : 'Pendente'}
+                      <div 
+                        className={`px-3 py-1 rounded-full text-xs font-bold uppercase cursor-pointer ${
+                          point.active 
+                            ? 'bg-[#22C55E]/10 text-[#22C55E]' 
+                            : 'bg-red-500/10 text-red-400'
+                        }`}
+                        onClick={() => togglePickupPointActive(point)}
+                      >
+                        {point.active ? 'Ativo' : 'Inativo'}
                       </div>
                     </div>
                   </div>
                   
-                  {deliveryOrders.length > 0 && (
+                  {pointOrders.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-white/5">
-                      <p className="text-neutral-500 text-xs font-bold uppercase mb-3">Pedidos nesta entrega:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {deliveryOrders.map(order => (
-                          <span key={order.id} className="px-3 py-1.5 bg-white/5 rounded-lg text-xs">
-                            <span className="text-white font-bold">#{order.referenceId?.slice(-6)}</span>
-                            <span className="text-neutral-400 ml-2">{order.userName || order.userEmail}</span>
-                            <span className="text-[#22C55E] ml-2">R$ {order.total?.toFixed(2)}</span>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-4">
+                          <p className="text-neutral-500 text-xs font-bold uppercase">Status:</p>
+                          <span className="text-xs text-amber-400 font-bold">
+                            {pendingCount} pendente{pendingCount !== 1 ? 's' : ''}
                           </span>
+                          <span className="text-xs text-[#22C55E] font-bold">
+                            {deliveredCount} entrega{deliveredCount !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={() => generatePDF(point)}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs hover:bg-white/10 transition-colors"
+                        >
+                          <Download className="w-3 h-3" />
+                          Gerar PDF
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {pointOrders.slice(0, 8).map(order => (
+                          <div 
+                            key={order.id}
+                            className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 ${
+                              order.delivered ? 'bg-[#22C55E]/10 border border-[#22C55E]/20' : 'bg-white/5 border border-white/10'
+                            }`}
+                          >
+                            <span className="text-white font-bold">#{order.referenceId?.slice(-6)}</span>
+                            <span className="text-neutral-400">{order.userName || order.userEmail?.split('@')[0]}</span>
+                            <span className="text-[#22C55E]">R$ {order.total?.toFixed(2)}</span>
+                            {order.delivered ? (
+                              <CheckCircle2 className="w-3 h-3 text-[#22C55E]" />
+                            ) : (
+                              <Clock className="w-3 h-3 text-amber-400" />
+                            )}
+                          </div>
                         ))}
+                        {pointOrders.length > 8 && (
+                          <span className="px-3 py-1.5 text-neutral-500 text-xs">
+                            +{pointOrders.length - 8} mais
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}
                   
                   <div className="flex items-center gap-2 mt-4">
                     <button 
+                      onClick={() => openPickupPointDetails(point)}
+                      className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase">Ver Detalhes</span>
+                    </button>
+                    <button 
                       onClick={() => {
-                        setEditingId(delivery.id);
-                        setFormData({ name: delivery.name, date: delivery.date.split('T')[0] });
+                        setEditingId(point.id);
+                        setFormData({ 
+                          name: point.name, 
+                          address: point.address,
+                          responsibleName: point.responsibleName || '',
+                          responsiblePhone: point.responsiblePhone || '',
+                          instructions: point.instructions || '',
+                          active: point.active 
+                        });
                         setShowModal(true);
                       }}
                       className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
@@ -292,7 +458,7 @@ export default function AdminDeliveriesPage() {
                       <span className="text-xs font-bold uppercase">Editar</span>
                     </button>
                     <button 
-                      onClick={() => handleDelete(delivery.id)}
+                      onClick={() => handleDelete(point.id)}
                       className="flex items-center gap-2 px-4 py-2 bg-red-500/5 border border-red-500/20 rounded-xl hover:bg-red-500/10 transition-colors text-red-400"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -305,6 +471,107 @@ export default function AdminDeliveriesPage() {
           </div>
         )}
       </main>
+
+      {/* Detail Modal */}
+      <AnimatePresence>
+        {showDetailModal && selectedPickupPoint && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowDetailModal(false)} />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-[#0c0c0e] border border-white/10 rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+            >
+              <button 
+                onClick={() => setShowDetailModal(false)}
+                className="absolute top-4 right-4 p-2 text-neutral-500 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="flex items-center gap-3 mb-2">
+                <MapPin className="w-6 h-6 text-[#22C55E]" />
+                <h2 className="text-xl font-black">{selectedPickupPoint.name}</h2>
+              </div>
+              <p className="text-neutral-500 text-sm mb-2">{selectedPickupPoint.address}</p>
+              {selectedPickupPoint.responsibleName && (
+                <p className="text-neutral-400 text-sm mb-6">
+                  Responsável: {selectedPickupPoint.responsibleName} - {selectedPickupPoint.responsiblePhone}
+                </p>
+              )}
+
+              <button 
+                onClick={() => generatePDF(selectedPickupPoint)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#22C55E] text-black font-bold text-sm rounded-xl mb-6 hover:scale-105 transition-transform"
+              >
+                <Download className="w-4 h-4" />
+                Baixar Relatório PDF
+              </button>
+
+              <div className="space-y-3">
+                {getOrdersForPickupPoint(selectedPickupPoint.name).map(order => (
+                  <div 
+                    key={order.id}
+                    className={`p-4 rounded-xl border ${
+                      order.delivered 
+                        ? 'bg-[#22C55E]/5 border-[#22C55E]/20' 
+                        : 'bg-white/5 border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="font-bold text-white">#{order.referenceId?.slice(-6)}</p>
+                        <p className="text-neutral-500 text-sm">{order.userName || order.userEmail}</p>
+                        <p className="text-neutral-500 text-xs">{order.userPhone}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-black text-lg text-white">R$ {order.total?.toFixed(2).replace('.', ',')}</p>
+                        <button 
+                          onClick={() => toggleOrderDelivered(order.id, !!order.delivered)}
+                          className={`flex items-center gap-1 text-xs font-bold uppercase mt-2 ${
+                            order.delivered ? 'text-[#22C55E]' : 'text-amber-400'
+                          }`}
+                        >
+                          {order.delivered ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3" />
+                              Entregue
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="w-3 h-3" />
+                              Pendente
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {order.items && order.items.length > 0 && (
+                      <div className="pt-2 border-t border-white/5">
+                        <p className="text-neutral-500 text-[10px] font-bold uppercase mb-2">Itens:</p>
+                        <div className="space-y-1">
+                          {order.items.map((item: any, idx: number) => (
+                            <div key={idx} className="flex justify-between text-xs">
+                              <span className="text-white/70">{item.name} x{item.quantity}</span>
+                              <span className="text-white/50">R$ {((item.unitAmount || 0) / 100).toFixed(2).replace('.', ',')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {getOrdersForPickupPoint(selectedPickupPoint.name).length === 0 && (
+                <p className="text-neutral-500 text-center py-8">Nenhum pedido neste ponto de entrega.</p>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Modal */}
       <AnimatePresence>
@@ -325,30 +592,76 @@ export default function AdminDeliveriesPage() {
               </button>
               
               <h2 className="text-xl font-black mb-6">
-                {editingId ? 'Editar Entrega' : 'Nova Entrega'}
+                {editingId ? 'Editar Ponto de Entrega' : 'Novo Ponto de Entrega'}
               </h2>
               
               <div className="space-y-4">
                 <div>
-                  <label className="text-neutral-500 text-xs font-bold uppercase block mb-2">Nome da Entrega</label>
+                  <label className="text-neutral-500 text-xs font-bold uppercase block mb-2">Nome do Ponto</label>
                   <input 
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Ex: Segunda-feira - ABC"
+                    placeholder="Ex: Academia ABC"
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-500 focus:border-[#22C55E]/30 outline-none"
                   />
                 </div>
                 
                 <div>
-                  <label className="text-neutral-500 text-xs font-bold uppercase block mb-2">Data de Entrega</label>
+                  <label className="text-neutral-500 text-xs font-bold uppercase block mb-2">Endereço</label>
                   <input 
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#22C55E]/30 outline-none"
+                    type="text"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    placeholder="Rua exemplo, 123"
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-500 focus:border-[#22C55E]/30 outline-none"
                   />
                 </div>
+
+                <div>
+                  <label className="text-neutral-500 text-xs font-bold uppercase block mb-2">Responsável</label>
+                  <input 
+                    type="text"
+                    value={formData.responsibleName}
+                    onChange={(e) => setFormData({ ...formData, responsibleName: e.target.value })}
+                    placeholder="Nome do responsável"
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-500 focus:border-[#22C55E]/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-neutral-500 text-xs font-bold uppercase block mb-2">Telefone do Responsável</label>
+                  <input 
+                    type="text"
+                    value={formData.responsiblePhone}
+                    onChange={(e) => setFormData({ ...formData, responsiblePhone: e.target.value })}
+                    placeholder="(11) 99999-9999"
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-500 focus:border-[#22C55E]/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-neutral-500 text-xs font-bold uppercase block mb-2">Instruções</label>
+                  <textarea 
+                    value={formData.instructions}
+                    onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
+                    placeholder="Instruções para retirada..."
+                    rows={3}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-500 focus:border-[#22C55E]/30 outline-none resize-none"
+                  />
+                </div>
+
+                {editingId && (
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input 
+                      type="checkbox"
+                      checked={formData.active}
+                      onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+                      className="w-4 h-4 rounded border-white/20 bg-black/40 text-[#22C55E] focus:ring-[#22C55E]"
+                    />
+                    <span className="text-white text-sm">Ponto ativo</span>
+                  </label>
+                )}
               </div>
               
               <div className="flex gap-3 mt-8">
@@ -360,7 +673,7 @@ export default function AdminDeliveriesPage() {
                 </button>
                 <button 
                   onClick={handleSave}
-                  disabled={!formData.name || !formData.date}
+                  disabled={!formData.name || !formData.address}
                   className="flex-1 py-3 bg-[#22C55E] text-black font-bold uppercase text-sm rounded-xl hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Salvar

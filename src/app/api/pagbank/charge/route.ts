@@ -203,8 +203,8 @@ export async function POST(request: Request) {
         });
         console.log('Order saved to Firestore:', referenceId, 'userId:', userId, 'email:', userEmailLower);
 
-        // Delete previous order if retry was successful
-        if (previousOrderId && (paymentData.status === 'PAID' || paymentData.status === 'AUTHORIZED')) {
+        // Delete previous order if this is a retry
+        if (previousOrderId) {
           try {
             await deleteDoc(doc(db, 'orders', previousOrderId));
             console.log('Previous order deleted:', previousOrderId);

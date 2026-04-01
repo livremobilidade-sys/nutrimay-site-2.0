@@ -483,11 +483,15 @@ export default function PedidosPage() {
                       
                       <button 
                         onClick={() => {
-                          const { restoreFromOrder } = useCartStore.getState();
+                          const { restoreFromOrder, previousOrderId } = useCartStore.getState();
                           const thermalBagOption = selectedOrder.thermalBag ? 'new' : undefined;
                           restoreFromOrder(selectedOrder.items, selectedOrder.pickupPoint, thermalBagOption, selectedOrder.id);
+                          console.log('🔄 [Pedidos] Restaurando pedido:', selectedOrder.id, 'previousOrderId após restore:', useCartStore.getState().previousOrderId);
                           setShowModal(false);
-                          router.push('/checkout');
+                          
+                          setTimeout(() => {
+                            router.push('/checkout');
+                          }, 100);
                         }}
                         className="w-full py-3 rounded-xl bg-[#22C55E] text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#22C55E]/90 transition-colors"
                       >

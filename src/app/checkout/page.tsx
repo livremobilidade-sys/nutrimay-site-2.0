@@ -395,6 +395,8 @@ export default function CheckoutPage() {
 
       const userId = currentUser?.uid;
       
+      console.log('🔄 [Checkout] Enviando para API - previousOrderId:', previousOrderId);
+      
       const res = await fetch('/api/pagbank/charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

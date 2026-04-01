@@ -178,6 +178,7 @@ export default function PedidosPage() {
             pickupPoint: data.pickupPoint || '',
             userEmail: data.userEmail || '',
             userName: data.userName || '',
+            thermalBag: data.thermalBag || false,
           }));
         
         setOrders(ordersData);
@@ -484,7 +485,7 @@ export default function PedidosPage() {
                         onClick={() => {
                           const { restoreFromOrder } = useCartStore.getState();
                           const thermalBagOption = selectedOrder.thermalBag ? 'new' : undefined;
-                          restoreFromOrder(selectedOrder.items, selectedOrder.pickupPoint, thermalBagOption);
+                          restoreFromOrder(selectedOrder.items, selectedOrder.pickupPoint, thermalBagOption, selectedOrder.id);
                           setShowModal(false);
                           router.push('/checkout');
                         }}

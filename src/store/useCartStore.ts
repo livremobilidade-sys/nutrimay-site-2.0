@@ -29,6 +29,7 @@ interface CartStore {
   pickupPoint: string | null;
   thermalBagOption: "new" | "exchange" | null;
   customer: Customer | null;
+  previousOrderId: string | null;
   addItem: (item: Product) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
@@ -36,7 +37,7 @@ interface CartStore {
   setThermalBagOption: (option: "new" | "exchange") => void;
   setCustomer: (customer: Customer) => void;
   clearCart: () => void;
-  restoreFromOrder: (items: any[], pickupPoint?: string, thermalBagOption?: "new" | "exchange") => void;
+  restoreFromOrder: (items: any[], pickupPoint?: string, thermalBagOption?: "new" | "exchange", previousOrderId?: string) => void;
   isCartOpen: boolean;
   openCart: () => void;
   closeCart: () => void;
@@ -50,6 +51,7 @@ export const useCartStore = create<CartStore>()(
       pickupPoint: null,
       thermalBagOption: null,
       customer: null,
+      previousOrderId: null,
       isCartOpen: false,
       addItem: (product) =>
         set((state) => {
@@ -79,8 +81,8 @@ export const useCartStore = create<CartStore>()(
       setPickupPoint: (point) => set({ pickupPoint: point }),
       setThermalBagOption: (option) => set({ thermalBagOption: option }),
       setCustomer: (customer) => set({ customer: customer }),
-      clearCart: () => set({ items: [], pickupPoint: null, thermalBagOption: null, customer: null }),
-      restoreFromOrder: (items, pickupPoint, thermalBagOption) => set({ 
+      clearCart: () => set({ items: [], pickupPoint: null, thermalBagOption: null, customer: null, previousOrderId: null }),
+      restoreFromOrder: (items, pickupPoint, thermalBagOption, previousOrderId) => set({ 
         items: items.map((item: any) => ({
           id: item.id || item.name?.toLowerCase().replace(/\s+/g, '-'),
           name: item.name,
@@ -92,6 +94,7 @@ export const useCartStore = create<CartStore>()(
         })),
         pickupPoint: pickupPoint || null,
         thermalBagOption: thermalBagOption || null,
+        previousOrderId: previousOrderId || null,
       }),
       openCart: () => set({ isCartOpen: true }),
       closeCart: () => set({ isCartOpen: false }),

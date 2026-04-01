@@ -50,6 +50,7 @@ export default function CheckoutPage() {
     customer,
     setCustomer,
     clearCart,
+    previousOrderId,
   } = useCartStore();
 
   const [formData, setFormData] = useState({
@@ -408,6 +409,7 @@ export default function CheckoutPage() {
           installments: selectedInstallment,
           cardHolderName,
           userId,
+          previousOrderId,
         })
       });
 

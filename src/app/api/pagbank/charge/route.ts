@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { CheckoutItem, CheckoutCustomer, cleanCpf, formatPhone, validateCheckoutPayload } from '@/lib/checkoutUtils';
 import { db } from '@/lib/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
 
 const PAGBANK_TOKEN = process.env.PAGBANK_TOKEN?.trim();
 const PAGBANK_URL = process.env.PAGBANK_ENV === 'production' 
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
       cardHolderName,
       userId,
       pickupPoint,
+      previousOrderId,
     }: {
       items: CheckoutItem[];
       thermalBagOption?: 'new' | 'exchange';
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       cardHolderName?: string;
       userId?: string;
       pickupPoint?: string;
+      previousOrderId?: string;
     } = body;
 
     validateCheckoutPayload(items, customer);
@@ -200,6 +202,16 @@ export async function POST(request: Request) {
           updatedAt: new Date(),
         });
         console.log('Order saved to Firestore:', referenceId, 'userId:', userId, 'email:', userEmailLower);
+
+        // Delete previous order if retry was successful
+        if (previousOrderId && (paymentData.status === 'PAID' || paymentData.status === 'AUTHORIZED')) {
+          try {
+            await deleteDoc(doc(db, 'orders', previousOrderId));
+            console.log('Previous order deleted:', previousOrderId);
+          } catch (deleteErr) {
+            console.error('Error deleting previous order:', deleteErr);
+          }
+        }
       } catch (saveErr) {
         console.error('Error saving order to Firestore:', saveErr);
       }

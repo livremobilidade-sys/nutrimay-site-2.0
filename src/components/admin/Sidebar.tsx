@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { 
   BarChart2, Users, Package, Settings, LogOut, 
-  CheckCircle, PlusCircle, LayoutDashboard, Search, MapPin, Truck
+  CheckCircle, PlusCircle, LayoutDashboard, Search, MapPin, Truck, Calendar
 } from "lucide-react";
 
 const navItems = [
   { name: "Visão Geral", icon: BarChart2, href: "/admin" },
   { name: "Pedidos", icon: Package, href: "/admin/orders" },
+  { name: "Lotes de Entrega", icon: Calendar, href: "/admin/batches" },
   { name: "Entregas", icon: Truck, href: "/admin/deliveries" },
   { name: "Clientes", icon: Users, href: "/admin/users" },
   { name: "Gestão de Catálogo", icon: Package, href: "/admin/products" },

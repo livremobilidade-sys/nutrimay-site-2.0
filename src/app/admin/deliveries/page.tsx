@@ -177,6 +177,48 @@ export default function AdminDeliveriesPage() {
     );
   };
 
+  const getAllPaidOrders = () => {
+    return orders.filter(o => o.status === 'PAID' || o.status === 'AUTHORIZED');
+  };
+
+  const toggleAllDelivered = async (pickupPointName: string) => {
+    const pointOrders = getOrdersForPickupPoint(pickupPointName);
+    const pendingOrders = pointOrders.filter(o => !o.delivered);
+    
+    if (pendingOrders.length === 0) {
+      if (!confirm('Marcar todos como pendentes?')) return;
+      
+      try {
+        for (const order of pointOrders) {
+          await updateDoc(doc(db, 'orders', order.id), {
+            delivered: false,
+            deliveredAt: null,
+            deliveryStatus: 'pending',
+          });
+        }
+        fetchData();
+      } catch (error) {
+        console.error('Error updating orders:', error);
+      }
+      return;
+    }
+    
+    if (!confirm(`Marcar todos os ${pendingOrders.length} pedidos como entregues?`)) return;
+    
+    try {
+      for (const order of pendingOrders) {
+        await updateDoc(doc(db, 'orders', order.id), {
+          delivered: true,
+          deliveredAt: new Date(),
+          deliveryStatus: 'delivered',
+        });
+      }
+      fetchData();
+    } catch (error) {
+      console.error('Error updating orders:', error);
+    }
+  };
+
   const generatePDF = (pickupPoint: PickupPoint) => {
     const pickupOrders = getOrdersForPickupPoint(pickupPoint.name);
     const deliveredOrders = pickupOrders.filter(o => o.delivered);
@@ -185,62 +227,90 @@ export default function AdminDeliveriesPage() {
     const doc = new jsPDF();
     
     doc.setFontSize(18);
-    doc.text('Relatório de Entrega', 14, 20);
+    doc.text('Relatório de Entrega - MayNutri', 14, 20);
     
     doc.setFontSize(12);
     doc.text(`Ponto de Entrega: ${pickupPoint.name}`, 14, 30);
-    doc.text(`Endereço: ${pickupPoint.address}`, 14, 36);
-    doc.text(`Responsável: ${pickupPoint.responsibleName}`, 14, 42);
-    doc.text(`Telefone: ${pickupPoint.responsiblePhone}`, 14, 48);
+    doc.text(`Endereço: ${pickupPoint.address || 'Não informado'}`, 14, 36);
+    doc.text(`Responsável: ${pickupPoint.responsibleName || 'Não informado'}`, 14, 42);
+    doc.text(`Telefone: ${pickupPoint.responsiblePhone || 'Não informado'}`, 14, 48);
+    doc.text(`Instruções: ${pickupPoint.instructions || 'Nenhuma'}`, 14, 54);
     
-    doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 54);
-    doc.text(`Total de Pedidos: ${pickupOrders.length}`, 14, 60);
-    doc.text(`Entregues: ${deliveredOrders.length}`, 14, 66);
-    doc.text(`Pendentes: ${pendingOrders.length}`, 14, 72);
+    doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 64);
+    doc.text(`Total de Pedidos: ${pickupOrders.length}`, 14, 70);
+    doc.text(`Entregues: ${deliveredOrders.length}`, 14, 76);
+    doc.text(`Pendentes: ${pendingOrders.length}`, 14, 82);
 
     const totalValue = pickupOrders.reduce((acc, o) => acc + (o.total || 0), 0);
-    doc.text(`Valor Total: R$ ${totalValue.toFixed(2).replace('.', ',')}`, 14, 78);
+    doc.text(`Valor Total: R$ ${totalValue.toFixed(2).replace('.', ',')}`, 14, 88);
 
-    if (deliveredOrders.length > 0) {
-      doc.setFontSize(14);
-      doc.text('Pedidos Entregues', 14, 90);
-      
-      const deliveredData = deliveredOrders.map(order => [
-        `#${order.referenceId?.slice(-6) || order.id.slice(-6)}`,
-        order.userName || order.userEmail || '-',
-        order.userPhone || '-',
-        `R$ ${order.total?.toFixed(2).replace('.', ',')}`,
-        order.deliveredAt?.toDate ? new Date(order.deliveredAt.toDate()).toLocaleDateString('pt-BR') : '-'
-      ]);
-
-      autoTable(doc, {
-        startY: 95,
-        head: [['Pedido', 'Cliente', 'Telefone', 'Valor', 'Data Entrega']],
-        body: deliveredData,
-        theme: 'striped',
-        headStyles: { fillColor: [34, 197, 94] },
-      });
-    }
+    let currentY = 98;
 
     if (pendingOrders.length > 0) {
-      const startY = deliveredOrders.length > 0 ? (deliveredOrders.length * 10) + 105 : 100;
-      
       doc.setFontSize(14);
-      doc.text('Pedidos Pendentes', 14, startY);
+      doc.text('Pedidos Pendentes', 14, currentY);
+      currentY += 8;
       
       const pendingData = pendingOrders.map(order => [
         `#${order.referenceId?.slice(-6) || order.id.slice(-6)}`,
         order.userName || order.userEmail || '-',
         order.userPhone || '-',
-        `R$ ${order.total?.toFixed(2).replace('.', ',')}`
+        order.pickupPoint || '-',
+        `R$ ${order.total?.toFixed(2).replace('.', ',')}`,
+        order.items?.length ? order.items.map((i: any) => `${i.name} x${i.quantity}`).join(', ') : '-'
       ]);
 
       autoTable(doc, {
-        startY: startY + 5,
-        head: [['Pedido', 'Cliente', 'Telefone', 'Valor']],
+        startY: currentY,
+        head: [['Pedido', 'Cliente', 'Telefone', 'Retirada', 'Valor', 'Itens']],
         body: pendingData,
         theme: 'striped',
         headStyles: { fillColor: [245, 158, 11] },
+        styles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: {
+          0: { cellWidth: 20 },
+          1: { cellWidth: 35 },
+          2: { cellWidth: 25 },
+          3: { cellWidth: 30 },
+          4: { cellWidth: 20 },
+          5: { cellWidth: 'auto' },
+        },
+      });
+      
+      currentY = (pendingOrders.length * 8) + 50;
+    }
+
+    if (deliveredOrders.length > 0) {
+      doc.addPage();
+      doc.setFontSize(14);
+      doc.text('Pedidos Entregues', 14, 20);
+      
+      const deliveredData = deliveredOrders.map(order => [
+        `#${order.referenceId?.slice(-6) || order.id.slice(-6)}`,
+        order.userName || order.userEmail || '-',
+        order.userPhone || '-',
+        order.pickupPoint || '-',
+        `R$ ${order.total?.toFixed(2).replace('.', ',')}`,
+        order.items?.length ? order.items.map((i: any) => `${i.name} x${i.quantity}`).join(', ') : '-',
+        order.deliveredAt?.toDate ? new Date(order.deliveredAt.toDate()).toLocaleDateString('pt-BR') : '-'
+      ]);
+
+      autoTable(doc, {
+        startY: 30,
+        head: [['Pedido', 'Cliente', 'Telefone', 'Retirada', 'Valor', 'Itens', 'Data Entrega']],
+        body: deliveredData,
+        theme: 'striped',
+        headStyles: { fillColor: [34, 197, 94] },
+        styles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: {
+          0: { cellWidth: 18 },
+          1: { cellWidth: 30 },
+          2: { cellWidth: 22 },
+          3: { cellWidth: 25 },
+          4: { cellWidth: 18 },
+          5: { cellWidth: 'auto' },
+          6: { cellWidth: 22 },
+        },
       });
     }
 
@@ -396,13 +466,23 @@ export default function AdminDeliveriesPage() {
                             {deliveredCount} entrega{deliveredCount !== 1 ? 's' : ''}
                           </span>
                         </div>
-                        <button 
-                          onClick={() => generatePDF(point)}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs hover:bg-white/10 transition-colors"
-                        >
-                          <Download className="w-3 h-3" />
-                          Gerar PDF
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => toggleAllDelivered(point.name)}
+                            className="flex items-center gap-1 px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-xs hover:bg-white/10 transition-colors text-amber-400"
+                            title="Marcar todos como entregues/pendentes"
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                            Todos
+                          </button>
+                          <button 
+                            onClick={() => generatePDF(point)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs hover:bg-white/10 transition-colors"
+                          >
+                            <Download className="w-3 h-3" />
+                            Gerar PDF
+                          </button>
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {pointOrders.slice(0, 8).map(order => (
@@ -507,6 +587,14 @@ export default function AdminDeliveriesPage() {
               >
                 <Download className="w-4 h-4" />
                 Baixar Relatório PDF
+              </button>
+
+              <button 
+                onClick={() => toggleAllDelivered(selectedPickupPoint.name)}
+                className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-white font-bold text-sm rounded-xl mb-4 hover:bg-white/10 transition-colors w-full justify-center"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Marcar Todos como Entregues/Pendentes
               </button>
 
               <div className="space-y-3">

@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft, Package, Clock, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ChevronLeft, Package, Clock, CheckCircle2, XCircle, AlertCircle, X, QrCode, ClipboardCheck, CreditCard, RefreshCw, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type OrderStatus = 'PAID' | 'AUTHORIZED' | 'WAITING_PAYMENT' | 'IN_ANALYSIS' | 'DECLINED' | 'CANCELED' | 'pending';
 
@@ -21,6 +21,8 @@ interface Order {
   paymentMethod: string;
   items: any[];
   pickupPoint: string;
+  userEmail?: string;
+  userName?: string;
 }
 
 const getStatusConfig = (status: string) => {
@@ -63,6 +65,46 @@ export default function PedidosPage() {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [user, setUser] = useState<any>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [isCheckingPix, setIsCheckingPix] = useState(false);
+  const [pixQrCode, setPixQrCode] = useState<string | null>(null);
+  const [pixText, setPixText] = useState<string | null>(null);
+
+  const fetchPixCode = async (orderId: string) => {
+    try {
+      const res = await fetch(`/api/pagbank/order-qrcode?id=${orderId}`);
+      const data = await res.json();
+      if (data.qrcode) {
+        setPixQrCode(data.qrcode);
+        setPixText(data.text);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar QR Code:', err);
+    }
+  };
+
+  const checkPixStatus = async (orderId: string) => {
+    setIsCheckingPix(true);
+    try {
+      const res = await fetch(`/api/pagbank/status?id=${orderId}`);
+      const data = await res.json();
+      
+      if (data.status === 'PAID' || data.status === 'AUTHORIZED') {
+        setSelectedOrder(prev => prev ? { ...prev, status: 'PAID' } : null);
+        alert('Pagamento aprovado!');
+      } else if (data.status === 'DECLINED' || data.status === 'CANCELED') {
+        setSelectedOrder(prev => prev ? { ...prev, status: 'DECLINED' } : null);
+        alert('Pagamento recusado.');
+      } else {
+        alert('Pagamento ainda não confirmado. Aguarde e tente novamente.');
+      }
+    } catch (err) {
+      console.error('Erro ao verificar status:', err);
+    } finally {
+      setIsCheckingPix(false);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -77,7 +119,6 @@ export default function PedidosPage() {
       try {
         const allOrders: any[] = [];
         
-        // First try by userId
         let q = query(
           collection(db, 'orders'),
           where('userId', '==', currentUser.uid)
@@ -88,14 +129,12 @@ export default function PedidosPage() {
         
         snapshot.forEach(doc => allOrders.push({ id: doc.id, ...doc.data() }));
         
-        // If no results, try by email
         if (allOrders.length === 0 && currentUser.email) {
           q = query(
             collection(db, 'orders'),
             where('userEmail', '==', currentUser.email.toLowerCase())
           );
           snapshot = await getDocs(q);
-          console.log('🔍 [Pedidos] Pedidos por email:', snapshot.size);
           
           snapshot.forEach(doc => {
             if (!allOrders.find(o => o.id === doc.id)) {
@@ -104,18 +143,12 @@ export default function PedidosPage() {
           });
         }
         
-        // If still empty, get ALL orders and filter client-side (for debugging)
         if (allOrders.length === 0) {
-          console.log('🔍 [Pedidos] Nenhum pedido encontrado, buscando todos...');
           q = query(collection(db, 'orders'));
           snapshot = await getDocs(q);
-          console.log('🔍 [Pedidos] Total de pedidos no banco:', snapshot.size);
           
           snapshot.forEach(doc => {
             const data = doc.data();
-            console.log('🔍 [Pedidos] Pedido:', doc.id, 'email:', data.userEmail, 'userId:', data.userId);
-            
-            // Match by userId or email
             if (data.userId === currentUser.uid || 
                 (currentUser.email && data.userEmail?.toLowerCase() === currentUser.email.toLowerCase())) {
               if (!allOrders.find(o => o.id === doc.id)) {
@@ -125,7 +158,6 @@ export default function PedidosPage() {
           });
         }
         
-        // Sort by createdAt descending on client side
         const ordersData: Order[] = allOrders
           .sort((a, b) => {
             const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
@@ -142,41 +174,13 @@ export default function PedidosPage() {
             paymentMethod: data.paymentMethod || 'credit_card',
             items: data.items || [],
             pickupPoint: data.pickupPoint || '',
+            userEmail: data.userEmail || '',
+            userName: data.userName || '',
           }));
         
-        console.log('🔍 [Pedidos] Pedidos carregados:', ordersData.length);
         setOrders(ordersData);
       } catch (error: any) {
         console.error('Erro ao buscar pedidos:', error);
-        if (error.message?.includes('index')) {
-          console.error('🔍 [Pedidos] Erro de índice. Tentando buscar sem filtros...');
-          // Fallback: get all and filter
-          try {
-            const q = query(collection(db, 'orders'));
-            const snapshot = await getDocs(q);
-            const ordersData: Order[] = [];
-            snapshot.forEach((doc) => {
-              const data = doc.data();
-              if (data.userId === currentUser.uid || 
-                  (currentUser.email && data.userEmail?.toLowerCase() === currentUser.email.toLowerCase())) {
-                ordersData.push({
-                  id: doc.id,
-                  referenceId: data.referenceId || '',
-                  orderId: data.orderId || data.pagbankOrderId || '',
-                  status: data.status || 'pending',
-                  total: data.total || 0,
-                  createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-                  paymentMethod: data.paymentMethod || 'credit_card',
-                  items: data.items || [],
-                  pickupPoint: data.pickupPoint || '',
-                });
-              }
-            });
-            setOrders(ordersData);
-          } catch (fallbackError) {
-            console.error('Erro no fallback:', fallbackError);
-          }
-        }
       } finally {
         setLoading(false);
       }
@@ -184,6 +188,17 @@ export default function PedidosPage() {
 
     return () => unsubscribe();
   }, [router]);
+
+  const openOrderDetails = async (order: Order) => {
+    setSelectedOrder(order);
+    setShowModal(true);
+    setPixQrCode(null);
+    setPixText(null);
+    
+    if ((order.status === 'WAITING_PAYMENT' || order.status === 'pending' || order.status === 'DECLINED' || order.status === 'CANCELED') && order.paymentMethod === 'pix') {
+      await fetchPixCode(order.orderId);
+    }
+  };
 
   if (loading) {
     return (
@@ -305,12 +320,12 @@ export default function PedidosPage() {
                       {statusConfig.label}
                     </div>
                     
-                    <Link
-                      href={`/pedido/${order.id}`}
+                    <button
+                      onClick={() => openOrderDetails(order)}
                       className="text-[#22C55E] text-xs font-bold uppercase hover:underline"
                     >
                       Ver Detalhes
-                    </Link>
+                    </button>
                   </div>
                 </motion.div>
               );
@@ -318,6 +333,179 @@ export default function PedidosPage() {
           </div>
         )}
       </main>
+
+      <AnimatePresence>
+        {showModal && selectedOrder && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          >
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowModal(false)} />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative w-full max-w-lg bg-[#1a1a1c] border border-white/10 rounded-3xl p-6 max-h-[90vh] overflow-y-auto"
+            >
+              <button 
+                onClick={() => setShowModal(false)}
+                className="absolute top-4 right-4 p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+
+              <div className="flex items-center gap-4 mb-6">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${getStatusConfig(selectedOrder.status).bg} ${getStatusConfig(selectedOrder.status).color}`}>
+                  {getStatusConfig(selectedOrder.status).icon}
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-white">Pedido #{selectedOrder.referenceId?.slice(-8) || selectedOrder.id.slice(-6)}</h2>
+                  <p className="text-neutral-500 text-xs">
+                    {new Date(selectedOrder.createdAt).toLocaleDateString('pt-BR', { 
+                      day: '2-digit', 
+                      month: 'long', 
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold uppercase mb-6 ${getStatusConfig(selectedOrder.status).bg} ${getStatusConfig(selectedOrder.status).color}`}>
+                {getStatusConfig(selectedOrder.status).icon}
+                {getStatusConfig(selectedOrder.status).label}
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl">
+                  <span className="text-neutral-400 text-sm">Total</span>
+                  <span className="font-black text-xl text-white">R$ {selectedOrder.total.toFixed(2).replace('.', ',')}</span>
+                </div>
+                
+                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl">
+                  <span className="text-neutral-400 text-sm">Forma de Pagamento</span>
+                  <span className="text-white font-bold">
+                    {selectedOrder.paymentMethod === 'pix' ? 'PIX' : 'Cartão de Crédito'}
+                  </span>
+                </div>
+
+                {selectedOrder.pickupPoint && (
+                  <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl">
+                    <span className="text-neutral-400 text-sm">Retirada em</span>
+                    <span className="text-[#22C55E] font-bold">{selectedOrder.pickupPoint}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-6">
+                <p className="text-neutral-500 text-xs font-bold uppercase mb-3">Itens do Pedido</p>
+                <div className="space-y-2">
+                  {selectedOrder.items?.map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between items-center p-3 bg-white/5 rounded-xl">
+                      <div>
+                        <span className="text-white text-sm">{item.name}</span>
+                        <span className="text-neutral-500 text-xs ml-2">x{item.quantity}</span>
+                      </div>
+                      <span className="text-white font-bold">R$ {((item.unitAmount || 0) / 100).toFixed(2).replace('.', ',')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {(selectedOrder.status === 'WAITING_PAYMENT' || selectedOrder.status === 'pending' || selectedOrder.status === 'DECLINED' || selectedOrder.status === 'CANCELED') && (
+                <div className="space-y-4">
+                  {selectedOrder.paymentMethod === 'pix' && (
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock className="w-5 h-5 text-amber-400" />
+                        <span className="text-amber-400 font-bold text-sm">Pagamento PIX Pendente</span>
+                      </div>
+                      
+                      {pixQrCode ? (
+                        <div className="space-y-3">
+                          <div className="bg-white p-3 rounded-xl flex justify-center">
+                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pixText || '')}`} alt="PIX QR" className="w-full max-w-[180px]" />
+                          </div>
+                          
+                          <button 
+                            onClick={() => {
+                              if (pixText) {
+                                navigator.clipboard.writeText(pixText);
+                                alert('Código PIX copiado!');
+                              }
+                            }}
+                            className="w-full py-2 rounded-xl bg-white/5 text-white font-bold text-sm border border-white/10 flex items-center justify-center gap-2 hover:bg-white/10 transition-colors"
+                          >
+                            <ClipboardCheck className="w-4 h-4" />
+                            Copiar Código PIX
+                          </button>
+                          
+                          <button 
+                            onClick={() => checkPixStatus(selectedOrder.orderId)}
+                            disabled={isCheckingPix}
+                            className="w-full py-2 rounded-xl bg-amber-500 text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-amber-400 transition-colors disabled:opacity-50"
+                          >
+                            {isCheckingPix ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                            {isCheckingPix ? 'Verificando...' : 'Verificar Pagamento'}
+                          </button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => fetchPixCode(selectedOrder.orderId)}
+                          className="w-full py-2 rounded-xl bg-white/5 text-white font-bold text-sm border border-white/10"
+                        >
+                          Carregar QR Code
+                        </button>
+                      )}
+                      
+                      <p className="text-neutral-500 text-xs mt-3 text-center">
+                        O pagamento será aprovado automaticamente após a confirmação.
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedOrder.paymentMethod === 'credit_card' && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                      <div className="flex items-center gap-2 mb-3">
+                        <XCircle className="w-5 h-5 text-red-400" />
+                        <span className="text-red-400 font-bold text-sm">Pagamento Recusado</span>
+                      </div>
+                      
+                      <p className="text-neutral-400 text-sm mb-4">
+                        Seu pagamento foi recusado. Você pode tentar novamente com outra forma de pagamento.
+                      </p>
+                      
+                      <Link 
+                        href="/checkout"
+                        onClick={() => setShowModal(false)}
+                        className="w-full py-3 rounded-xl bg-[#22C55E] text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#22C55E]/90 transition-colors"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        Tentar Novamente
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedOrder.status === 'PAID' || selectedOrder.status === 'AUTHORIZED' ? (
+                <div className="p-4 bg-[#22C55E]/10 border border-[#22C55E]/20 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-[#22C55E]" />
+                    <span className="text-[#22C55E] font-bold text-sm">Pagamento Aprovado</span>
+                  </div>
+                  <p className="text-neutral-400 text-xs mt-2">
+                    Seu pedido foi confirmado e está em processamento.
+                  </p>
+                </div>
+              ) : null}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

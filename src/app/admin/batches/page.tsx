@@ -41,21 +41,37 @@ interface Order {
 const getDeliveryDateForOrder = (orderDate: Date): Date => {
   const day = orderDate.getDay();
   const hour = orderDate.getHours();
-  const minutes = orderDate.getMinutes();
+  const minute = orderDate.getMinutes();
   
-  const isBeforeCutoff = day === 2 && hour < 14;
+  const deliveryDate = new Date(orderDate);
+  deliveryDate.setHours(0, 0, 0, 0);
   
-  let deliveryDate = new Date(orderDate);
+  // Day 0 = Sunday, 1 = Monday, 2 = Tuesday, 3 = Wednesday, 4 = Thursday, 5 = Friday, 6 = Saturday
+  
+  // Tuesday before 14:00 → deliver THIS Wednesday (day 3)
+  const isBeforeCutoff = day < 2 || (day === 2 && (hour < 14 || (hour === 14 && minute === 0)));
   
   if (isBeforeCutoff) {
-    const daysUntilWednesday = (3 - day + 7) % 7 || 7;
-    deliveryDate.setDate(orderDate.getDate() + daysUntilWednesday);
+    if (day === 3) {
+      deliveryDate.setDate(orderDate.getDate());
+    } else if (day === 2) {
+      deliveryDate.setDate(orderDate.getDate() + 1);
+    } else {
+      const daysUntilWednesday = (3 - day + 7) % 7;
+      deliveryDate.setDate(orderDate.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
+    }
   } else {
-    const daysUntilWednesday = (3 - day + 7) % 7;
-    deliveryDate.setDate(orderDate.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
+    // Tuesday after 14:00 OR any other day → next Wednesday
+    if (day === 3) {
+      deliveryDate.setDate(orderDate.getDate() + 7);
+    } else if (day === 2) {
+      deliveryDate.setDate(orderDate.getDate() + 8);
+    } else {
+      const daysUntilWednesday = (3 - day + 7) % 7;
+      deliveryDate.setDate(orderDate.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
+    }
   }
   
-  deliveryDate.setHours(0, 0, 0, 0);
   return deliveryDate;
 };
 
@@ -72,20 +88,33 @@ const getNextDeliveryDate = () => {
   const now = new Date();
   const day = now.getDay();
   const hour = now.getHours();
+  const minute = now.getMinutes();
   
-  const isBeforeCutoff = day < 2 || (day === 2 && hour < 14);
+  const isBeforeCutoff = day < 2 || (day === 2 && (hour < 14 || (hour === 14 && minute === 0)));
   
-  let deliveryDate = new Date(now);
+  const deliveryDate = new Date(now);
+  deliveryDate.setHours(0, 0, 0, 0);
   
   if (isBeforeCutoff) {
-    const daysUntilWednesday = (3 - day + 7) % 7 || 7;
-    deliveryDate.setDate(now.getDate() + daysUntilWednesday);
+    if (day === 3) {
+      deliveryDate.setDate(now.getDate());
+    } else if (day === 2) {
+      deliveryDate.setDate(now.getDate() + 1);
+    } else {
+      const daysUntilWednesday = (3 - day + 7) % 7;
+      deliveryDate.setDate(now.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
+    }
   } else {
-    const daysUntilWednesday = (3 - day + 7) % 7;
-    deliveryDate.setDate(now.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
+    if (day === 3) {
+      deliveryDate.setDate(now.getDate() + 7);
+    } else if (day === 2) {
+      deliveryDate.setDate(now.getDate() + 8);
+    } else {
+      const daysUntilWednesday = (3 - day + 7) % 7;
+      deliveryDate.setDate(now.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
+    }
   }
   
-  deliveryDate.setHours(0, 0, 0, 0);
   return deliveryDate;
 };
 
@@ -93,21 +122,29 @@ const getNextCutoffDate = () => {
   const now = new Date();
   const day = now.getDay();
   const hour = now.getHours();
+  const minute = now.getMinutes();
   
-  const isBeforeCutoff = day < 2 || (day === 2 && hour < 14);
+  const isBeforeCutoff = day < 2 || (day === 2 && (hour < 14 || (hour === 14 && minute === 0)));
   
-  let cutoffDate = new Date(now);
+  const cutoffDate = new Date(now);
   
   if (isBeforeCutoff) {
-    cutoffDate.setHours(14, 0, 0, 0);
-  } else {
-    if (day === 2 && hour >= 14) {
-      cutoffDate.setDate(cutoffDate.getDate() + 7);
+    if (day === 2) {
+      cutoffDate.setHours(14, 0, 0, 0);
     } else {
       const daysUntilNextTuesday = (2 - day + 7) % 7 || 7;
       cutoffDate.setDate(now.getDate() + daysUntilNextTuesday);
+      cutoffDate.setHours(14, 0, 0, 0);
     }
-    cutoffDate.setHours(14, 0, 0, 0);
+  } else {
+    if (day === 2) {
+      cutoffDate.setDate(now.getDate() + 7);
+      cutoffDate.setHours(14, 0, 0, 0);
+    } else {
+      const daysUntilNextTuesday = (2 - day + 7) % 7 || 7;
+      cutoffDate.setDate(now.getDate() + daysUntilNextTuesday);
+      cutoffDate.setHours(14, 0, 0, 0);
+    }
   }
   
   return cutoffDate;
@@ -248,6 +285,10 @@ export default function AdminBatchesPage() {
         batchName: null,
       });
       
+      if (selectedBatch && selectedBatch.id === batchId) {
+        setSelectedBatch({ ...selectedBatch, orderIds: newOrderIds });
+      }
+      
       fetchData();
     } catch (error) {
       console.error('Error removing order from batch:', error);
@@ -259,9 +300,10 @@ export default function AdminBatchesPage() {
     
     try {
       const currentOrderIds = selectedBatch.orderIds || [];
+      const newOrderIds = [...currentOrderIds, orderId];
       
       await updateDoc(doc(db, 'batches', selectedBatch.id), {
-        orderIds: [...currentOrderIds, orderId],
+        orderIds: newOrderIds,
       });
       
       await updateDoc(doc(db, 'orders', orderId), {
@@ -269,9 +311,9 @@ export default function AdminBatchesPage() {
         batchName: selectedBatch.name,
       });
       
+      setSelectedBatch({ ...selectedBatch, orderIds: newOrderIds });
       setShowAddOrderModal(false);
       fetchData();
-      setSelectedBatch(batches.find(b => b.id === selectedBatch.id) || null);
     } catch (error) {
       console.error('Error adding order to batch:', error);
     }
@@ -293,20 +335,22 @@ export default function AdminBatchesPage() {
 
   const getAvailableOrdersForBatch = () => {
     const currentBatchOrderIds = selectedBatch?.orderIds || [];
-    const deliveryDate = selectedBatch?.deliveryDate ? new Date(selectedBatch.deliveryDate) : null;
+    const deliveryDate = selectedBatch?.deliveryDate ? new Date(selectedBatch.deliveryDate + 'T00:00:00') : null;
+    
+    if (!deliveryDate) return [];
     
     return orders.filter(o => {
       const isPaid = o.status === 'PAID' || o.status === 'AUTHORIZED';
       const notInBatch = !currentBatchOrderIds.includes(o.id);
       
-      if (!deliveryDate || notInBatch === false) return isPaid && notInBatch;
+      if (!isPaid || !notInBatch) return false;
       
       const orderDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date();
       const orderDeliveryDate = getDeliveryDateForOrder(orderDate);
       
       const sameWeek = deliveryDate.toDateString() === orderDeliveryDate.toDateString();
       
-      return isPaid && notInBatch && sameWeek;
+      return sameWeek;
     });
   };
 

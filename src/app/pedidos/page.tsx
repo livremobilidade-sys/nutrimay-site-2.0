@@ -19,6 +19,8 @@ interface Order {
   total: number;
   createdAt: string;
   paymentMethod: string;
+  items: any[];
+  pickupPoint: string;
 }
 
 const getStatusConfig = (status: string) => {
@@ -112,6 +114,8 @@ export default function PedidosPage() {
             total: data.total || 0,
             createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
             paymentMethod: data.paymentMethod || 'credit_card',
+            items: data.items || [],
+            pickupPoint: data.pickupPoint || '',
           });
         });
         
@@ -215,6 +219,30 @@ export default function PedidosPage() {
                       </p>
                     </div>
                   </div>
+                  
+                  {order.items && order.items.length > 0 && (
+                    <div className="mb-4 p-3 bg-white/5 rounded-xl">
+                      <p className="text-neutral-500 text-[10px] font-bold uppercase mb-2">Itens</p>
+                      <div className="space-y-1">
+                        {order.items.slice(0, 3).map((item: any, idx: number) => (
+                          <div key={idx} className="flex justify-between text-xs">
+                            <span className="text-white/70">{item.name} x{item.quantity}</span>
+                            <span className="text-white/50">R$ {((item.unitAmount || 0) / 100).toFixed(2).replace('.', ',')}</span>
+                          </div>
+                        ))}
+                        {order.items.length > 3 && (
+                          <p className="text-neutral-500 text-xs">+{order.items.length - 3} mais itens</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {order.pickupPoint && (
+                    <div className="mb-4 text-xs">
+                      <span className="text-neutral-500">Retirada em: </span>
+                      <span className="text-[#22C55E] font-bold">{order.pickupPoint}</span>
+                    </div>
+                  )}
                   
                   <div className="flex items-center justify-between">
                     <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase ${statusConfig.bg} ${statusConfig.color}`}>

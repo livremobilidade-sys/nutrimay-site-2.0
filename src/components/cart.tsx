@@ -4,11 +4,14 @@ import { useCartStore, checkIsCartClosed, getBatchStatus } from "@/store/useCart
 import { useState, useEffect } from "react";
 import { AlertCircle, Trash2, X, Calendar, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { db } from "@/lib/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 export function Cart() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [pickupPointsList, setPickupPointsList] = useState<any[]>([]);
 
   
   const {
@@ -25,6 +28,23 @@ export function Cart() {
 
   useEffect(() => {
     setMounted(true);
+    
+    // Load pickup points from Firebase
+    const loadPickupPoints = async () => {
+      try {
+        const q = query(collection(db, "pickupPoints"), where("active", "==", true));
+        const snapshot = await getDocs(q);
+        const points: any[] = [];
+        snapshot.forEach(doc => {
+          points.push({ id: doc.id, ...doc.data() });
+        });
+        setPickupPointsList(points);
+      } catch (e) {
+        console.error('Error loading pickup points:', e);
+      }
+    };
+    
+    loadPickupPoints();
   }, []);
 
   if (!mounted) return null;
@@ -33,11 +53,9 @@ export function Cart() {
   const isClosed = checkIsCartClosed();
   const { isNextBatch, deliveryDate } = getBatchStatus();
 
-  const pickupPoints = [
-    "Smart Fit - Centro",
-    "Bluefit - Jardins",
-    "WeWork - Av. Paulista",
-  ];
+  const pickupPoints = pickupPointsList.length > 0 
+    ? pickupPointsList.map(p => p.name) 
+    : ["Selecione um ponto"];
 
   const bagOptions = [
     { id: "new", label: "Primeira compra? (+ Bolsa Térmica R$ 10,00)" },

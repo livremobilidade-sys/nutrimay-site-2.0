@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       installments = 1,
       cardHolderName,
       userId,
+      pickupPoint,
     }: {
       items: CheckoutItem[];
       thermalBagOption?: 'new' | 'exchange';
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
       installments?: number;
       cardHolderName?: string;
       userId?: string;
+      pickupPoint?: string;
     } = body;
 
     validateCheckoutPayload(items, customer);
@@ -180,6 +182,7 @@ export async function POST(request: Request) {
           userEmail: customer?.email || null,
           userName: customer?.name || null,
           userCpf: customer?.cpf || null,
+          userPhone: customer?.phone || null,
           status: paymentData.status,
           paymentMethod,
           total: totalAmount / 100,
@@ -188,6 +191,8 @@ export async function POST(request: Request) {
             quantity: item.quantity,
             unitAmount: item.unit_amount,
           })),
+          pickupPoint: thermalBagOption === 'new' ? pickupPoint : null,
+          thermalBag: thermalBagOption === 'new' ? true : false,
           createdAt: new Date(),
           updatedAt: new Date(),
         });

@@ -22,6 +22,7 @@ interface Order {
   userEmail: string;
   userName: string;
   items: any[];
+  pickupPoint: string;
 }
 
 const getStatusConfig = (status: string) => {
@@ -86,27 +87,43 @@ export default function AdminOrdersPage() {
       const snapshot = await getDocs(q);
       const ordersData: Order[] = [];
       
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        ordersData.push({
-          id: doc.id,
-          referenceId: data.referenceId || '',
-          orderId: data.orderId || data.pagbankOrderId || '',
-          status: data.status || 'pending',
-          total: data.total || 0,
-          createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          paymentMethod: data.paymentMethod || 'credit_card',
-          userEmail: data.userEmail || '',
-          userName: data.userName || '',
-          items: data.items || [],
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          ordersData.push({
+            id: doc.id,
+            referenceId: data.referenceId || '',
+            orderId: data.orderId || data.pagbankOrderId || '',
+            status: data.status || 'pending',
+            total: data.total || 0,
+            createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            paymentMethod: data.paymentMethod || 'credit_card',
+            userEmail: data.userEmail || '',
+            userName: data.userName || '',
+            items: data.items || [],
+            pickupPoint: data.pickupPoint || '',
+          });
         });
-      });
       
       setOrders(ordersData);
     } catch (error) {
       console.error('Erro ao buscar pedidos:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        status: newStatus,
+        updatedAt: new Date(),
+      });
+      
+      setOrders(orders.map(o => 
+        o.id === orderId ? { ...o, status: newStatus as any } : o
+      ));
+    } catch (error) {
+      console.error('Error updating order status:', error);
     }
   };
 
@@ -275,9 +292,24 @@ export default function AdminOrdersPage() {
                         </p>
                       </td>
                       <td className="p-6">
-                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase ${statusConfig.bg} ${statusConfig.color}`}>
-                          {statusConfig.icon}
-                          {statusConfig.label}
+                        <div className="flex flex-col gap-1">
+                          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase ${statusConfig.bg} ${statusConfig.color}`}>
+                            {statusConfig.icon}
+                            {statusConfig.label}
+                          </div>
+                          <select 
+                            value={order.status}
+                            onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                            className="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white/60 outline-none hover:border-white/20 cursor-pointer"
+                          >
+                            <option value="PROCESSING">Processando</option>
+                            <option value="WAITING_PAYMENT">Aguardando</option>
+                            <option value="PAID">Pago</option>
+                            <option value="AUTHORIZED">Autorizado</option>
+                            <option value="IN_ANALYSIS">Em Análise</option>
+                            <option value="DECLINED">Recusado</option>
+                            <option value="CANCELED">Cancelado</option>
+                          </select>
                         </div>
                       </td>
                       <td className="p-6 text-right">

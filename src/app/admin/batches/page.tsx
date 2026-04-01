@@ -6,7 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, getDocs, orderBy, addDoc, doc, updateDoc, deleteDoc, where, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Package, Calendar, Plus, ChevronLeft, Edit, Trash2, X, Check, Eye, Clock, CheckCircle2, Truck, Users, PlusCircle, MinusCircle, Search } from 'lucide-react';
+import { Package, Calendar, Plus, ChevronLeft, Edit, Trash2, X, Check, Eye, Clock, CheckCircle2, Truck, Users, PlusCircle, MinusCircle, Search, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -323,10 +323,29 @@ export default function AdminBatchesPage() {
     return orders.filter(o => batchOrderIds?.includes(o.id));
   };
 
+  const getOrdersGroupedByPickupPoint = (batchOrderIds: string[]) => {
+    const batchOrders = getOrdersInBatch(batchOrderIds);
+    const grouped: Record<string, typeof batchOrders> = {};
+    
+    batchOrders.forEach(order => {
+      const pickupPoint = order.pickupPoint || 'Sem local definido';
+      if (!grouped[pickupPoint]) {
+        grouped[pickupPoint] = [];
+      }
+      grouped[pickupPoint].push(order);
+    });
+    
+    return grouped;
+  };
+
   const getUnassignedOrders = () => {
-    return orders.filter(o => 
-      !o.batchId && (o.status === 'PAID' || o.status === 'AUTHORIZED')
-    );
+    const nextDelivery = getNextDeliveryDate();
+    return orders.filter(o => {
+      if (o.batchId || (o.status !== 'PAID' && o.status !== 'AUTHORIZED')) return false;
+      const orderDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date();
+      const orderDeliveryDate = getDeliveryDateForOrder(orderDate);
+      return orderDeliveryDate.toDateString() === nextDelivery.toDateString();
+    });
   };
 
   const getOrdersByBatch = (batchId: string) => {
@@ -718,63 +737,73 @@ export default function AdminBatchesPage() {
                 Baixar Relatório PDF
               </button>
 
-              <div className="space-y-3">
-                {getOrdersInBatch(selectedBatch.orderIds || []).map(order => (
-                  <div 
-                    key={order.id}
-                    className={`p-4 rounded-xl border ${
-                      order.delivered 
-                        ? 'bg-[#22C55E]/5 border-[#22C55E]/20' 
-                        : 'bg-white/5 border-white/10'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <p className="font-bold text-white">#{order.referenceId?.slice(-6)}</p>
-                          <p className="text-neutral-500 text-xs">
-                            {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
-                          </p>
-                        </div>
-                        <p className="text-neutral-500 text-sm">{order.userName || order.userEmail}</p>
-                        <p className="text-neutral-500 text-xs">{order.pickupPoint}</p>
-                      </div>
-                      <div className="text-right flex items-center gap-4">
-                        <div>
-                          <p className="font-black text-lg text-white">R$ {order.total?.toFixed(2).replace('.', ',')}</p>
-                          <button 
-                            onClick={async () => {
-                              await updateDoc(doc(db, 'orders', order.id), {
-                                delivered: !order.delivered,
-                                deliveredAt: !order.delivered ? new Date() : null,
-                              });
-                              fetchData();
-                            }}
-                            className={`flex items-center gap-1 text-xs font-bold uppercase mt-2 ${
-                              order.delivered ? 'text-[#22C55E]' : 'text-amber-400'
-                            }`}
-                          >
-                            {order.delivered ? (
-                              <>
-                                <CheckCircle2 className="w-3 h-3" />
-                                Entregue
-                              </>
-                            ) : (
-                              <>
-                                <Clock className="w-3 h-3" />
-                                Pendente
-                              </>
-                            )}
-                          </button>
-                        </div>
-                        <button 
-                          onClick={() => removeOrderFromBatch(order.id, selectedBatch.id)}
-                          className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                          title="Remover do lote"
+              <div className="space-y-6">
+                {Object.entries(getOrdersGroupedByPickupPoint(selectedBatch.orderIds || [])).map(([pickupPoint, orders]) => (
+                  <div key={pickupPoint}>
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/10">
+                      <MapPin className="w-4 h-4 text-[#22C55E]" />
+                      <p className="text-[#22C55E] font-bold text-sm">{pickupPoint}</p>
+                      <p className="text-neutral-500 text-xs ml-auto">{orders.length} pedido{orders.length !== 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="space-y-2">
+                      {orders.map(order => (
+                        <div 
+                          key={order.id}
+                          className={`p-4 rounded-xl border ${
+                            order.delivered 
+                              ? 'bg-[#22C55E]/5 border-[#22C55E]/20' 
+                              : 'bg-white/5 border-white/10'
+                          }`}
                         >
-                          <MinusCircle className="w-5 h-5" />
-                        </button>
-                      </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <p className="font-bold text-white">#{order.referenceId?.slice(-6)}</p>
+                                <p className="text-neutral-500 text-xs">
+                                  {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                </p>
+                              </div>
+                              <p className="text-neutral-500 text-sm">{order.userName || order.userEmail}</p>
+                            </div>
+                            <div className="text-right flex items-center gap-4">
+                              <div>
+                                <p className="font-black text-lg text-white">R$ {order.total?.toFixed(2).replace('.', ',')}</p>
+                                <button 
+                                  onClick={async () => {
+                                    await updateDoc(doc(db, 'orders', order.id), {
+                                      delivered: !order.delivered,
+                                      deliveredAt: !order.delivered ? new Date() : null,
+                                    });
+                                    fetchData();
+                                  }}
+                                  className={`flex items-center gap-1 text-xs font-bold uppercase mt-2 ${
+                                    order.delivered ? 'text-[#22C55E]' : 'text-amber-400'
+                                  }`}
+                                >
+                                  {order.delivered ? (
+                                    <>
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      Entregue
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Clock className="w-3 h-3" />
+                                      Pendente
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                              <button 
+                                onClick={() => removeOrderFromBatch(order.id, selectedBatch.id)}
+                                className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                title="Remover do lote"
+                              >
+                                <MinusCircle className="w-5 h-5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}

@@ -39,6 +39,10 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://maynutri.com.br",
   },
+  icons: {
+    icon: "/favicon.png",
+    apple: "/favicon.png",
+  },
 };
 
 export default function RootLayout({

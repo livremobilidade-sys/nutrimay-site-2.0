@@ -72,36 +72,44 @@ export default function PedidosPage() {
       }
       setUser(currentUser);
       
+      console.log('🔍 [Pedidos] Usuário logado:', currentUser.email, currentUser.uid);
+      
       try {
-        let q;
+        // First try by userId
+        let q = query(
+          collection(db, 'orders'),
+          where('userId', '==', currentUser.uid),
+          orderBy('createdAt', 'desc')
+        );
         
-        // Try to get orders by userId first
-        try {
-          q = query(
-            collection(db, 'orders'),
-            where('userId', '==', currentUser.uid),
-            orderBy('createdAt', 'desc')
-          );
-          const snapshot = await getDocs(q);
-          
-          // If no orders with userId, try to get by email
-          if (snapshot.empty && currentUser.email) {
-            q = query(
-              collection(db, 'orders'),
-              where('userEmail', '==', currentUser.email),
-              orderBy('createdAt', 'desc')
-            );
-          }
-        } catch (e) {
-          // If query fails (index not ready), fall back to email query
+        let snapshot = await getDocs(q);
+        console.log('🔍 [Pedidos] Pedidos por userId:', snapshot.size);
+        
+        // If no results, try by email
+        if (snapshot.empty && currentUser.email) {
           q = query(
             collection(db, 'orders'),
             where('userEmail', '==', currentUser.email),
             orderBy('createdAt', 'desc')
           );
+          snapshot = await getDocs(q);
+          console.log('🔍 [Pedidos] Pedidos por email:', snapshot.size);
         }
         
-        const snapshot = await getDocs(q);
+        // If still empty, get ALL orders and filter client-side (for debugging)
+        if (snapshot.empty) {
+          console.log('🔍 [Pedidos] Nenhum pedido encontrado, buscando todos...');
+          q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+          snapshot = await getDocs(q);
+          console.log('🔍 [Pedidos] Total de pedidos no banco:', snapshot.size);
+          
+          // Show all orders for debugging
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            console.log('🔍 [Pedidos] Pedido:', doc.id, 'email:', data.userEmail, 'userId:', data.userId);
+          });
+        }
+        
         const ordersData: Order[] = [];
         
         snapshot.forEach((doc) => {
@@ -119,6 +127,7 @@ export default function PedidosPage() {
           });
         });
         
+        console.log('🔍 [Pedidos] Pedidos carregados:', ordersData.length);
         setOrders(ordersData);
       } catch (error) {
         console.error('Erro ao buscar pedidos:', error);

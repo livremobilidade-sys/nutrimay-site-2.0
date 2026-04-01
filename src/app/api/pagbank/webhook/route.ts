@@ -20,16 +20,16 @@ export async function POST(request: Request) {
 
       // Map PagBank status to our internal status
       const statusMap: Record<string, string> = {
-        'PAID': 'pago',
-        'AUTHORIZED': 'autorizado',
-        'IN_ANALYSIS': 'em_analise',
-        'DECLINED': 'recusado',
-        'CANCELED': 'cancelado',
-        'REFUNDED': 'reembolsado',
-        'WAITING': 'aguardando',
+        'PAID': 'PAID',
+        'AUTHORIZED': 'AUTHORIZED',
+        'IN_ANALYSIS': 'IN_ANALYSIS',
+        'DECLINED': 'DECLINED',
+        'CANCELED': 'CANCELED',
+        'REFUNDED': 'REFUNDED',
+        'WAITING_PAYMENT': 'WAITING_PAYMENT',
       };
 
-      const internalStatus = statusMap[status] || status?.toLowerCase() || 'desconhecido';
+      const internalStatus = statusMap[status] || status?.toUpperCase() || 'PENDING';
 
       // Try to find and update order in Firestore if reference_id matches
       if (referenceId && referenceId.startsWith('ORDER-')) {
@@ -41,9 +41,10 @@ export async function POST(request: Request) {
           if (!snap.empty) {
             const orderDoc = snap.docs[0];
             await updateDoc(doc(db, 'orders', orderDoc.id), {
+              status: internalStatus,
               paymentStatus: internalStatus,
               pagbankStatus: status,
-              updatedAt: new Date().toISOString(),
+              updatedAt: new Date(),
             });
             console.log(`✅ [Webhook] Pedido ${referenceId} atualizado para: ${internalStatus}`);
           } else {

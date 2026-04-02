@@ -251,17 +251,22 @@ export default function ProductsAdmin() {
   };
 
   const handleDelete = async (e: any, id: string) => {
-     e.stopPropagation();
-     e.preventDefault();
-     console.log("🗑️ [Delete] Apagando produto:", id);
-     try {
-        await deleteDoc(doc(db, "products", id));
-        console.log("✅ [Delete] Produto removido com sucesso!");
-     } catch (err) {
-        console.error("❌ [Delete] Erro ao deletar:", err);
-        alert("Erro ao excluir do Firebase.");
-     }
-  };
+      e.stopPropagation();
+      e.preventDefault();
+      console.log("🗑️ [Delete] Apagando produto:", id);
+      try {
+         await deleteDoc(doc(db, "products", id));
+         console.log("✅ [Delete] Produto removido com sucesso!");
+         
+         const updatedProducts = products.filter(p => p.id !== id).sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+         for (let i = 0; i < updatedProducts.length; i++) {
+            await updateDoc(doc(db, "products", updatedProducts[i].id), { orderIndex: i + 1 });
+         }
+      } catch (err) {
+         console.error("❌ [Delete] Erro ao deletar:", err);
+         alert("Erro ao excluir do Firebase.");
+      }
+   };
 
   const handleSubmit = async (e: React.FormEvent) => {
      e.preventDefault();

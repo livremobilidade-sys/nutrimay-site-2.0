@@ -430,56 +430,87 @@ export default function AdminBatchesPage() {
     const deliveredOrders = batchOrders.filter(o => o.delivered);
     const pendingOrders = batchOrders.filter(o => !o.delivered);
 
-    const doc = new jsPDF();
+    const pdf = new jsPDF();
+    const pageWidth = pdf.internal.pageSize.getWidth();
     
-    doc.setFontSize(18);
-    doc.text(`Lote de Entrega - ${batch.name}`, 14, 20);
+    pdf.setFontSize(18);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`Lote de Entrega - ${batch.name}`, pageWidth / 2, 20, { align: 'center' });
     
-    doc.setFontSize(12);
-    doc.text(`Data de Entrega: ${new Date(batch.deliveryDate).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}`, 14, 30);
-    doc.text(`Total de Pedidos: ${batchOrders.length}`, 14, 36);
-    doc.text(`Entregues: ${deliveredOrders.length}`, 14, 42);
-    doc.text(`Pendentes: ${pendingOrders.length}`, 14, 48);
-
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Data de Entrega: ${new Date(batch.deliveryDate).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}`, 14, 30);
+    
+    pdf.setFontSize(10);
+    pdf.text(`Total de Pedidos: ${batchOrders.length}  |  Entregues: ${deliveredOrders.length}  |  Pendentes: ${pendingOrders.length}`, 14, 38);
+    
     const totalValue = batchOrders.reduce((acc, o) => acc + (o.total || 0), 0);
-    doc.text(`Valor Total: R$ ${totalValue.toFixed(2).replace('.', ',')}`, 14, 54);
-
+    pdf.text(`Valor Total: R$ ${totalValue.toFixed(2).replace('.', ',')}`, 14, 46);
+    
+    pdf.setDrawColor(200);
+    pdf.line(14, 50, pageWidth - 14, 50);
+    
     const groupedByPickup = batchOrders.reduce((acc, order) => {
-      const point = order.pickupPoint || 'Não definido';
+      const point = order.pickupPoint || 'Sem local definido';
       if (!acc[point]) acc[point] = [];
       acc[point].push(order);
       return acc;
     }, {} as Record<string, Order[]>);
 
-    let currentY = 65;
+    let currentY = 58;
 
     Object.entries(groupedByPickup).forEach(([pickupPoint, pointOrders]) => {
-      doc.setFontSize(12);
-      doc.text(`${pickupPoint} (${pointOrders.length} pedidos)`, 14, currentY);
-      currentY += 6;
+      if (currentY > 250) {
+        pdf.addPage();
+        currentY = 20;
+      }
       
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFillColor(34, 197, 94);
+      pdf.rect(14, currentY - 5, pageWidth - 28, 8, 'F');
+      pdf.setTextColor(255);
+      pdf.text(`${pickupPoint} (${pointOrders.length} pedidos)`, 16, currentY + 1);
+      currentY += 12;
+      
+      pdf.setTextColor(0);
       const pointData = pointOrders.map(order => [
         `#${order.referenceId?.slice(-6) || order.id.slice(-6)}`,
-        order.userName || order.userEmail || '-',
+        (order.userName || order.userEmail || '-').substring(0, 30),
         order.userPhone || '-',
-        order.delivered ? '✓' : '○',
+        order.delivered ? '✓ ENTREGUE' : '○ PENDENTE',
         `R$ ${order.total?.toFixed(2).replace('.', ',')}`
       ]);
 
-      autoTable(doc, {
+      autoTable(pdf, {
         startY: currentY,
         head: [['Pedido', 'Cliente', 'Telefone', 'Status', 'Valor']],
         body: pointData,
         theme: 'striped',
-        headStyles: { fillColor: [245, 158, 11] },
-        styles: { fontSize: 9 },
+        headStyles: { 
+          fillColor: [245, 158, 11],
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 9
+        },
+        bodyStyles: {
+          fontSize: 8
+        },
+        columnStyles: {
+          0: { cellWidth: 20 },
+          1: { cellWidth: 60 },
+          2: { cellWidth: 35 },
+          3: { cellWidth: 35 },
+          4: { cellWidth: 25, halign: 'right' }
+        },
+        margin: { left: 14, right: 14 },
       });
 
-      currentY = (pointOrders.length * 7) + 25;
+      currentY = (pdf as any).lastAutoTable.finalY + 10;
     });
 
     const fileName = `lote-${batch.name.toLowerCase().replace(/\s+/g, '-')}.pdf`;
-    doc.save(fileName);
+    pdf.save(fileName);
   };
 
   const openBatchDetails = (batch: Batch) => {

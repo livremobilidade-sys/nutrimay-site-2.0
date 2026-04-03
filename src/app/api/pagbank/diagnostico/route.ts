@@ -1,101 +1,81 @@
 import { NextResponse } from 'next/server';
 
-const PAGBANK_TOKEN = process.env.PAGBANK_TOKEN?.trim();
-const PAGBANK_URL = process.env.PAGBANK_ENV === 'production' 
-  ? 'https://api.pagseguro.com/orders'
-  : 'https://sandbox.api.pagseguro.com/orders';
+export async function GET() {
+  const token = process.env.PAGBANK_TOKEN?.trim();
+  const env = process.env.PAGBANK_ENV || 'sandbox';
+  
+  const baseUrl = env === 'production' 
+    ? 'https://api.pagseguro.com' 
+    : 'https://sandbox.api.pagseguro.com';
 
-export async function POST(request: Request) {
+  const results: any = {
+    environment: env,
+    baseUrl,
+    tokenConfigured: !!token,
+    tokenPrefix: token ? token.substring(0, 10) + '...' : 'NÃO CONFIGURADO',
+    tests: {},
+  };
+
+  if (!token) {
+    results.error = 'Token não configurado. Adicione PAGBANK_TOKEN nas variáveis de ambiente.';
+    return NextResponse.json(results);
+  }
+
   try {
-    const body = await request.json();
-    const { testType } = body;
-
-    console.log('--- DIAGNOSTICO PAGBANK ---');
-    console.log('Test type:', testType);
-
-    const testPayload: any = {
-      reference_id: `DIAG-${Date.now()}`,
-      customer: {
-        name: 'Teste Cliente',
-        email: 'teste@email.com',
-        tax_id: '33813392813',
-      },
-      items: [
-        {
-          reference_id: 'test-item-1',
-          name: 'Item Teste',
-          quantity: 1,
-          unit_amount: 1000,
-        },
-      ],
-      notification_urls: ['https://maynutri.com.br/api/pagbank/webhook'],
-    };
-
-    if (testType === 'PIX') {
-      const now = new Date();
-      now.setHours(now.getHours() + 1);
-      testPayload.qr_codes = [{
-        amount: {
-          value: 1000,
-        },
-        expiration_date: now.toISOString(),
-      }];
-    } else if (testType === 'CREDIT_CARD') {
-      testPayload.charges = [{
-        reference_id: `CHARGE-${Date.now()}`,
-        amount: {
-          value: 1000,
-          currency: 'BRL',
-        },
-        payment_method: {
-          type: 'CREDIT_CARD',
-          installments: 1,
-          capture: true,
-          card: {
-            encrypted: 'test_encrypted_card',
-          },
-          holder: {
-            name: 'TESTE CLIENTE',
-            tax_id: '33813392813',
-          },
-        },
-      }];
-    }
-
-    console.log('Test payload:', JSON.stringify(testPayload, null, 2));
-
-    const response = await fetch(PAGBANK_URL, {
+    const response = await fetch(`${baseUrl}/public-keys`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${PAGBANK_TOKEN}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
       },
-      body: JSON.stringify(testPayload),
+      body: JSON.stringify({ type: 'card' }),
     });
 
-    const text = await response.text();
-    console.log('Response status:', response.status);
-    console.log('Response body:', text.substring(0, 500));
-
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = text;
-    }
-
-    return NextResponse.json({
-      testType,
+    const data = await response.json();
+    
+    results.tests.publicKey = {
+      success: response.ok,
       status: response.status,
-      response: parsed,
+      publicKey: data.public_key ? data.public_key.substring(0, 30) + '...' : null,
+      message: response.ok ? 'Chave pública obtida com sucesso!' : data.message || data.error,
+    };
+  } catch (error: any) {
+    results.tests.publicKey = {
+      success: false,
+      error: error.message,
+    };
+  }
+
+  try {
+    const sessionResponse = await fetch(`${baseUrl}/sessions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     });
 
+    const sessionData = await sessionResponse.json();
+    
+    results.tests.session = {
+      success: sessionResponse.ok,
+      status: sessionResponse.status,
+      sessionId: sessionData.id ? sessionData.id.substring(0, 20) + '...' : null,
+      message: sessionResponse.ok ? 'Sessão criada com sucesso!' : sessionData.message || sessionData.error,
+    };
   } catch (error: any) {
-    console.error('Diagnostico error:', error.message);
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    results.tests.session = {
+      success: false,
+      error: error.message,
+    };
   }
+
+  const allSuccess = results.tests.publicKey?.success && results.tests.session?.success;
+  
+  results.status = allSuccess ? 'CONECTADO' : 'ERRO';
+  results.message = allSuccess 
+    ? 'PagBank conectado com sucesso! Pagamentos prontos para produção.' 
+    : 'Erro na conexão com PagBank. Verifique as variáveis de ambiente.';
+
+  return NextResponse.json(results);
 }

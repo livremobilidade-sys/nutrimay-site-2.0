@@ -71,6 +71,7 @@ export async function POST(request: Request) {
       },
       items: pagbankItems,
       notification_urls: [`${baseUrl}/api/pagbank/webhook`],
+      redirect_url: `${baseUrl}/pedido/sucesso`,
     };
 
     const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);

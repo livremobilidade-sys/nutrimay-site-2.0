@@ -14,8 +14,22 @@ import { doc, getDoc } from "firebase/firestore";
 
 export default function ShopPage() {
   const router = useRouter();
-  const [isMethodModalOpen, setIsMethodModalOpen] = useState(true);
+  const [isMethodModalOpen, setIsMethodModalOpen] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
+
+  // Control MethodHeader modal visibility
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const key = "methodModalViews";
+      const stored = Number(localStorage.getItem(key) ?? "0") + 1;
+      localStorage.setItem(key, stored.toString());
+
+      // Show on first visit and every 5th visit
+      if (stored === 1 || stored % 5 === 0) {
+        setIsMethodModalOpen(true);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {

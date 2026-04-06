@@ -92,9 +92,15 @@ export async function POST(request: Request) {
     }
 
     if (!response.ok) {
-      const message = data.error_messages 
-        ? data.error_messages.map((m: any) => `${m.parameter || 'root'}: ${m.description}`).join(' | ') 
-        : 'Erro retornado pelo PagBank';
+      console.error('--- ERRO DO PAGBANK (checkout) ---', JSON.stringify(data, null, 2));
+      let message = 'Erro retornado pelo PagBank';
+      if (data.error_messages && Array.isArray(data.error_messages)) {
+        message = data.error_messages
+          .map((m: any) => `${m.parameter_name || m.parameter || 'campo'}: ${m.description || m.message}`)
+          .join(' | ');
+      } else if (data.message) {
+        message = data.message;
+      }
       throw new Error(message);
     }
 

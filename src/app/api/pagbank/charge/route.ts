@@ -150,10 +150,24 @@ export async function POST(request: Request) {
     if (!response.ok) {
       console.error('--- ERRO DO PAGBANK ---');
       console.error('Status:', response.status);
-      console.error('Response:', JSON.stringify(data));
-      const message = data.error_messages 
-        ? data.error_messages.map((m: any) => `${m.parameter || 'root'}: ${m.description}`).join(' | ') 
-        : data.message || `Erro retornado pelo PagBank (status ${response.status})`;
+      console.error('Response completo:', JSON.stringify(data, null, 2));
+      
+      let message = `Erro PagBank (status ${response.status})`;
+
+      if (data.error_messages && Array.isArray(data.error_messages)) {
+        // PagBank retorna "parameter_name", não "parameter"
+        message = data.error_messages
+          .map((m: any) => {
+            const field = m.parameter_name || m.parameter || 'campo desconhecido';
+            const desc = m.description || m.message || 'erro';
+            console.error(`  Campo com erro: ${field} → ${desc}`);
+            return `${field}: ${desc}`;
+          })
+          .join(' | ');
+      } else if (data.message) {
+        message = data.message;
+      }
+
       throw new Error(message);
     }
 

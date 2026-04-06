@@ -402,7 +402,12 @@ export default function CheckoutPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items,
-          customer: formData,
+          customer: {
+            name: formData.name,
+            email: formData.email,
+            cpf: formData.cpf,
+            phone: formData.phone,
+          },
           pickupPoint,
           thermalBagOption,
           paymentMethod,

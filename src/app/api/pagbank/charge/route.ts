@@ -62,12 +62,22 @@ export async function POST(request: Request) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://maynutri.com.br';
     const referenceId = `ORDER-${Date.now()}`;
 
+    // Valida e limpa o CPF — obrigatório para o PagBank
+    const taxId = customer?.cpf?.replace(/\D/g, '');
+    if (!taxId || taxId.length !== 11) {
+      throw new Error('CPF do cliente é obrigatório e deve ter 11 dígitos.');
+    }
+
+    // Formata o telefone se disponível
+    const phone = customer?.phone ? formatPhone(customer.phone) : undefined;
+
     const payload: any = {
       reference_id: referenceId,
       customer: {
         name: customer?.name ?? 'Cliente MayNutri',
         email: customer?.email || 'cliente@email.com',
-        tax_id: customer?.cpf ? customer.cpf.replace(/\D/g, '') : '33813392813',
+        tax_id: taxId,
+        ...(phone && { phones: [phone] }),
       },
       items: pagbankItems,
       notification_urls: [`${baseUrl}/api/pagbank/webhook`],
@@ -96,7 +106,7 @@ export async function POST(request: Request) {
           },
           holder: {
             name: (cardHolderName || customer?.name || 'Cliente').toUpperCase(),
-            tax_id: customer?.cpf ? customer.cpf.replace(/\D/g, '') : '33813392813',
+            tax_id: taxId,
           },
         },
       }];

@@ -117,17 +117,20 @@ export default function CheckoutPage() {
           if (userDoc.exists()) {
             const data = userDoc.data();
             setFormData(prev => {
+              const addr = data.address || {};  // endereço salvo em objeto aninhado
               const newData = {
                 ...prev,
-                name: prev.name || user.displayName || data.name || "",
-                email: prev.email || user.email || data.email || "",
-                cpf: prev.cpf || data.cpf || "",
-                phone: prev.phone || data.phone || "",
-                cep: prev.cep || data.cep || "",
-                street: prev.street || data.street || "",
-                number: prev.number || data.number || "",
-                city: prev.city || data.city || "",
-                state: prev.state || data.state || ""
+                name:   prev.name   || user.displayName || data.name   || "",
+                email:  prev.email  || user.email        || data.email  || "",
+                cpf:    prev.cpf    || data.cpf    || "",
+                phone:  prev.phone  || data.phone  || "",
+                // Endereço vem de data.address (aninhado no Firestore)
+                cep:    prev.cep    || addr.cep    || "",
+                street: prev.street || addr.street || "",
+                number: prev.number || addr.number || "",
+                complement: prev.complement || addr.complement || "",
+                city:   prev.city   || addr.city   || "",
+                state:  prev.state  || addr.state  || "",
               };
               
               if (newData.name && newData.email && newData.cpf && newData.phone) {

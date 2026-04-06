@@ -272,11 +272,20 @@ export default function ProductsAdmin() {
      e.preventDefault();
      setSaving(true);
      try {
+        // ---------- VALIDAÇÃO DE PREÇO ----------
+        // O preço deve ser >= 1.00 (R$ 1,00). Caso contrário, aborta o submit.
+        const parsedPrice = parseFloat(String(formData.price).replace(',', '.')) || 0;
+        if (parsedPrice < 1) {
+          alert('⚠️ O preço do produto deve ser no mínimo R$ 1,00.');
+          setSaving(false);
+          return;
+        }
+
         const productPayload = {
            name: formData.name,
            tag: formData.tag || "",
-           // Aceita vírgula (0,20) ou ponto (0.20) como separador decimal
-           price: parseFloat(String(formData.price).replace(',', '.')) || 0,
+           // Valor já validado acima
+           price: parsedPrice,
            marketingCopy: formData.marketingCopy || "",
            image: formData.image || "",
            status: formData.status,
@@ -435,12 +444,27 @@ export default function ProductsAdmin() {
                      </div>
                      <div className="space-y-8">
                         <input type="text" placeholder="NOME DO MIX..." value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-white/[0.03] border border-white/5 rounded-xl p-4 text-xs font-black text-white uppercase outline-none" />
-                        <input type="number" step="0.01" placeholder="PREÇO R$..." value={formData.price} onChange={(e) => setFormData({...formData, price: e.target.value})} className="w-full bg-white/[0.03] border border-white/5 rounded-xl p-4 text-xs font-black text-white outline-none" />
+                        <input
+                           type="number"
+                           step="0.01"
+                           placeholder="PREÇO R$..."
+                           value={formData.price}
+                           onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                           className={`w-full bg-white/[0.03] border border-white/5 rounded-xl p-4 text-xs font-black text-white outline-none ${formData.price && parseFloat(String(formData.price).replace(',', '.')) < 1 ? 'border-red-500/80 focus:border-red-500/80' : ''}`}
+                        />
                         <select value={formData.tag} onChange={(e) => setFormData({...formData, tag: e.target.value})} className="w-full bg-white/[0.03] border border-white/5 rounded-xl p-4 text-[10px] font-black text-white uppercase outline-none"><option value="" className="bg-neutral-900">SELECIONE TAG...</option>{availableCategories.map(c => <option key={c} value={c} className="bg-neutral-900">{c}</option>)}</select>
                         <textarea rows={4} placeholder="MARKETING SLOGAN..." value={formData.marketingCopy} onChange={(e) => setFormData({...formData, marketingCopy: e.target.value})} className="w-full bg-white/[0.03] border border-white/5 rounded-2xl p-6 text-xs font-bold text-white uppercase outline-none resize-none leading-relaxed italic" />
                      </div>
                   </div>
-                  <div className="pt-8 border-t border-white/5 flex items-center justify-end"><button type="submit" disabled={saving} className="px-14 py-3 rounded-full bg-[#22C55E] text-black font-black text-[12px] uppercase shadow-2xl disabled:opacity-50">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar Mix na Nuvem'}</button></div>
+                  <div className="pt-8 border-t border-white/5 flex items-center justify-end">
+                    <button
+                      type="submit"
+                      disabled={saving || (formData.price && parseFloat(String(formData.price).replace(',', '.')) < 1)}
+                      className="px-14 py-3 rounded-full bg-[#22C55E] text-black font-black text-[12px] uppercase shadow-2xl disabled:opacity-50"
+                    >
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar Mix na Nuvem'}
+                    </button>
+                  </div>
                </form>
             </motion.div>
           </div>

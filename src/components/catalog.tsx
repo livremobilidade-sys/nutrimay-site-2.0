@@ -2,6 +2,8 @@
 
 import { useCartStore } from "@/store/useCartStore";
 import { Plus } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import InfoPopup from "@/components/InfoPopup";
 
 const PRODUCTS = [
   {
@@ -46,6 +48,8 @@ export function Catalog() {
   const addItem = useCartStore((state) => state.addItem);
 
   return (
+      {/* Popup explicativo */}
+      <InfoPopup />
     <section id="produtos" className="py-24 container mx-auto px-4">
       <div className="mb-16 text-center">
         <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-4">Escolha o seu Resultado</h2>

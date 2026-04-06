@@ -6,14 +6,18 @@ import { X } from "lucide-react";
 export default function InfoPopup() {
   const [show, setShow] = useState(false);
 
-  // Count page visits using localStorage
+  // Control popup visibility (once a day)
   useEffect(() => {
-    const key = "productPageViews";
-    const stored = Number(localStorage.getItem(key) ?? "0") + 1;
-    localStorage.setItem(key, stored.toString());
+    if (typeof window !== "undefined") {
+      const key = "infoPopupLastShownDate";
+      const lastShownDate = localStorage.getItem(key);
+      const today = new Date().toDateString();
 
-    // Show on first visit and every 5th visit thereafter
-    if (stored === 1 || stored % 5 === 0) setShow(true);
+      if (lastShownDate !== today) {
+        setShow(true);
+        localStorage.setItem(key, today);
+      }
+    }
   }, []);
 
   if (!show) return null;

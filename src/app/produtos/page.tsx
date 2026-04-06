@@ -20,13 +20,14 @@ export default function ShopPage() {
   // Control MethodHeader modal visibility
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const key = "methodModalViews";
-      const stored = Number(localStorage.getItem(key) ?? "0") + 1;
-      localStorage.setItem(key, stored.toString());
+      const key = "methodModalLastShownDate";
+      const lastShownDate = localStorage.getItem(key);
+      const today = new Date().toDateString();
 
-      // Show on first visit and every 5th visit
-      if (stored === 1 || stored % 5 === 0) {
+      // Show on first visit or if it hasn't been shown today
+      if (lastShownDate !== today) {
         setIsMethodModalOpen(true);
+        localStorage.setItem(key, today);
       }
     }
   }, []);

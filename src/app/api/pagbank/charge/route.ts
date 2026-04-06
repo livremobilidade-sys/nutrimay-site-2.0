@@ -43,12 +43,23 @@ export async function POST(request: Request) {
       throw new Error('Cartão criptografado é obrigatório para pagamento com cartão');
     }
 
-    const pagbankItems = items.map((item) => ({
-      reference_id: String(item.id).substring(0, 64),
-      name: String(item.name).replace(/[\[\]]/g, '').substring(0, 100),
-      quantity: Math.max(1, Math.floor(Number(item.quantity)) || 1),
-      unit_amount: Math.floor(Math.round(Number(item.price) * 100)),
-    }));
+    const pagbankItems = items.map((item) => {
+      const price = Number(item.price);
+      const qty = Math.max(1, Math.floor(Number(item.quantity)) || 1);
+      // Converte para centavos como inteiro puro (evita float como 3990.000001)
+      const unit_amount = Math.round(price * 100);
+
+      if (!Number.isFinite(unit_amount) || unit_amount <= 0) {
+        throw new Error(`Preço inválido para o item "${item.name}": R$ ${price}`);
+      }
+
+      return {
+        reference_id: String(item.id).substring(0, 64),
+        name: String(item.name).replace(/[\[\]]/g, '').substring(0, 100),
+        quantity: qty,
+        unit_amount,
+      };
+    });
 
     if (thermalBagOption === 'new') {
       pagbankItems.push({
@@ -84,8 +95,17 @@ export async function POST(request: Request) {
       redirect_url: `${baseUrl}/pedido/sucesso`,
     };
 
-    const totalAmount = pagbankItems.reduce((sum, item) => sum + (item.unit_amount * item.quantity), 0);
-    
+    // Garante inteiro puro — NaN ou float quebrado virariam null no JSON e causariam invalid_parameter
+    const totalAmount = Math.round(
+      pagbankItems.reduce((sum, item) => sum + item.unit_amount * item.quantity, 0)
+    );
+
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      throw new Error(`Valor total inválido: ${totalAmount} centavos. Verifique os preços dos produtos.`);
+    }
+
+    console.log('[charge] totalAmount (centavos):', totalAmount, '| R$', (totalAmount / 100).toFixed(2));
+
     if (paymentMethod === 'credit_card') {
       if (!encryptedCard) {
         throw new Error('Cartão criptografado é obrigatório para pagamento com cartão');

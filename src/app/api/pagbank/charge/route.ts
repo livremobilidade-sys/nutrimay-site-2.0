@@ -46,12 +46,17 @@ export async function POST(request: Request) {
     const pagbankItems = items.map((item) => {
       const price = Number(item.price);
       const qty = Math.max(1, Math.floor(Number(item.quantity)) || 1);
-      // Converte para centavos como inteiro puro (evita float como 3990.000001)
-      const unit_amount = Math.round(price * 100);
 
-      if (!Number.isFinite(unit_amount) || unit_amount <= 0) {
-        throw new Error(`Preço inválido para o item "${item.name}": R$ ${price}`);
+      // Converte via string para evitar QUALQUER problema de ponto flutuante
+      // Ex: 39.9 * 100 = 3989.999... (bug), mas parseInt("39.90".replace('.','')) = 3990 (correto)
+      const priceFmt = price.toFixed(2);          // "39.90"
+      const unit_amount = parseInt(priceFmt.replace('.', ''), 10);  // 3990 (inteiro puro)
+
+      if (!Number.isInteger(unit_amount) || unit_amount <= 0) {
+        throw new Error(`Preço inválido para o item "${item.name}": R$ ${price} → ${unit_amount} centavos`);
       }
+
+      console.log(`[charge] item "${item.name}": R$ ${price} → ${unit_amount} centavos (qty: ${qty})`);
 
       return {
         reference_id: String(item.id).substring(0, 64),
@@ -60,6 +65,7 @@ export async function POST(request: Request) {
         unit_amount,
       };
     });
+
 
     if (thermalBagOption === 'new') {
       pagbankItems.push({
@@ -95,20 +101,27 @@ export async function POST(request: Request) {
       redirect_url: `${baseUrl}/pedido/sucesso`,
     };
 
-    // Garante inteiro puro — NaN ou float quebrado virariam null no JSON e causariam invalid_parameter
-    const totalAmount = Math.round(
-      pagbankItems.reduce((sum, item) => sum + item.unit_amount * item.quantity, 0)
+    // Soma inteiros → resultado inteiro (sem float)
+    const totalAmount = pagbankItems.reduce(
+      (sum, item) => sum + item.unit_amount * item.quantity, 0
     );
 
-    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
-      throw new Error(`Valor total inválido: ${totalAmount} centavos. Verifique os preços dos produtos.`);
+    if (!Number.isInteger(totalAmount) || totalAmount <= 0) {
+      throw new Error(`Valor total inválido: ${totalAmount} centavos. Tipo: ${typeof totalAmount}`);
     }
 
-    console.log('[charge] totalAmount (centavos):', totalAmount, '| R$', (totalAmount / 100).toFixed(2));
+    // Log detalhado para diagnóstico — inspecione nos logs da Hostinger
+    console.log('[charge] === PAYLOAD RESUMO ===');
+    console.log('[charge] totalAmount:', totalAmount, '| tipo:', typeof totalAmount, '| é inteiro:', Number.isInteger(totalAmount));
+    console.log('[charge] R$', (totalAmount / 100).toFixed(2), '| método:', paymentMethod);
+    console.log('[charge] items enviados ao PagBank:', JSON.stringify(pagbankItems));
 
     if (paymentMethod === 'credit_card') {
       if (!encryptedCard) {
         throw new Error('Cartão criptografado é obrigatório para pagamento com cartão');
+      }
+      if (totalAmount < 100) {
+        throw new Error(`Valor mínimo para cartão de crédito é R$ 1,00. Total atual: R$ ${(totalAmount / 100).toFixed(2).replace('.', ',')}`);
       }
       
       (payload as any).charges = [{

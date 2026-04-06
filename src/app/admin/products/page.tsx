@@ -275,7 +275,8 @@ export default function ProductsAdmin() {
         const productPayload = {
            name: formData.name,
            tag: formData.tag || "",
-           price: parseFloat(formData.price) || 0,
+           // Aceita vírgula (0,20) ou ponto (0.20) como separador decimal
+           price: parseFloat(String(formData.price).replace(',', '.')) || 0,
            marketingCopy: formData.marketingCopy || "",
            image: formData.image || "",
            status: formData.status,

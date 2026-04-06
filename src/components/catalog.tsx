@@ -48,11 +48,12 @@ export function Catalog() {
   const addItem = useCartStore((state) => state.addItem);
 
   return (
+    <>
       {/* Popup explicativo */}
       <InfoPopup />
-    <section id="produtos" className="py-24 container mx-auto px-4">
-      <div className="mb-16 text-center">
-        <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-4">Escolha o seu Resultado</h2>
+      <section id="produtos" className="py-24 container mx-auto px-4">
+        <div className="mb-16 text-center">
+          <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-4">Escolha o seu Resultado</h2>
         <p className="text-[var(--foreground)]/60 max-w-2xl mx-auto text-lg">
           Nós não vendemos apenas frutas. Nós entregamos performance, recuperação e vitalidade na sua porta.
         </p>

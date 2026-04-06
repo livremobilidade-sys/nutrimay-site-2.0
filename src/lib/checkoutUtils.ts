@@ -26,6 +26,7 @@ export const cleanCpf = (cpf: string): string => {
 /**
  * Formata telefone para o padrão esperado pelo PagBank.
  * Retorna undefined se o número for inválido.
+ * O PagBank exige os campos: type, country, area, number.
  */
 export const formatPhone = (phone?: string) => {
   if (!phone) return undefined;
@@ -42,6 +43,7 @@ export const formatPhone = (phone?: string) => {
   if (number.length !== 9) return undefined;
   
   return {
+    type: "MOBILE",   // obrigatório pelo PagBank
     country: "55",
     area,
     number,
